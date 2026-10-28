@@ -51,4 +51,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
     except AIProviderNotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        # Keep provider diagnostics in server logs; never return internal
+        # exception text (which may contain URLs or sensitive details) to clients.
+        logging.getLogger(__name__).exception("Chat provider request failed")
+        raise HTTPException(
+            status_code=502,
+            detail="The AI provider request failed. Check server logs and provider configuration.",
+        ) from exc

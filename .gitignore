@@ -1,46 +1,31 @@
-.venv/
+# Environment secrets
 .env
+.env.*
+!.env.example
+
+# Python environments and generated files
+.venv/
+venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
-.vscode/
-.idea/
+htmlcov/
 dist/
 build/
+*.egg-info/
 
-# Secrets
-.env
-.env.*
-!.env.example
+# Editors
+.vscode/
+.idea/
 
-# Python environments and cache
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.coverage
+# Local model files and runtime data
+*.task
+models/
+uploads/
+vector_db/
 
-# Cloned research repositories
-ALOS/
-Ari-VoiceCommand/
-faster-whisper/
-mediapipe-samples/
-
-# Secrets
-.env
-.env.*
-!.env.example
-
-# Python environments
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-
-# Separate research repositories
+# Cloned upstream research repositories (never commit these wholesale)
 ALOS/
 Ari-VoiceCommand/
 faster-whisper/

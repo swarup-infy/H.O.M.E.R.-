@@ -1,8 +1,7 @@
 """Lazy, CPU-friendly speech transcription using faster-whisper.
 
-This module never loads a model at import time. The first call to
-transcribe_file() downloads/loads the configured model, so use a small model
-and int8 compute on laptops with limited RAM.
+No model is loaded at import time. The first call to transcribe_file() loads
+the configured local model, which may download weights from Hugging Face.
 """
 from __future__ import annotations
 
@@ -12,7 +11,7 @@ from pathlib import Path
 
 
 class VoiceDependencyError(RuntimeError):
-    """Raised when optional voice dependencies are unavailable."""
+    """Raised when the optional transcription package is not installed."""
 
 
 @lru_cache(maxsize=1)
@@ -21,31 +20,22 @@ def _load_model():
         from faster_whisper import WhisperModel
     except ImportError as exc:
         raise VoiceDependencyError(
-            "Voice transcription requires the optional dependencies. "
-            "Install with: pip install -r requirements-voice.txt"
+            "Install optional voice dependencies with: "
+            "pip install -r requirements-voice.txt"
         ) from exc
 
     model_name = os.getenv("HOMER_WHISPER_MODEL", "base")
-    # CPU int8 avoids requiring a GPU. Lower HOMER_WHISPER_MODEL to 'tiny'
-    # if latency or memory use is too high.
+    threads = max(1, int(os.getenv("HOMER_WHISPER_THREADS", "4")))
     return WhisperModel(
         model_name,
         device="cpu",
         compute_type="int8",
-        cpu_threads=max(1, int(os.getenv("HOMER_WHISPER_THREADS", "4"))),
+        cpu_threads=threads,
     )
 
 
 def transcribe_file(file_path: str | Path, language: str | None = None) -> str:
-    """Transcribe an existing audio file to plain text.
-
-    Args:
-        file_path: Path to a supported audio file.
-        language: Optional ISO language code such as 'en'.
-
-    Returns:
-        The transcript as a string.
-    """
+    """Transcribe an existing audio file using CPU int8 inference."""
     path = Path(file_path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(f"Audio file does not exist: {path}")

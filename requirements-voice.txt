@@ -1,2 +1,2 @@
-# Optional local speech-to-text support (kept separate from the API backend)
+# Optional local speech-to-text; separate from the API backend requirements
 faster-whisper>=1.0,<2.0

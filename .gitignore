@@ -30,3 +30,7 @@ ALOS/
 Ari-VoiceCommand/
 faster-whisper/
 mediapipe-samples/
+
+# Local backup files
+*.backup
+*.bak

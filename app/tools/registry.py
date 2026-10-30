@@ -66,7 +66,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "additionalProperties": False,
             },
         },
-    },,
+    },
     {
         "type": "function",
         "function": {

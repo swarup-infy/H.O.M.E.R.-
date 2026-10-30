@@ -337,6 +337,11 @@ class HomerWindow(QMainWindow):
             )
         )
 
+        globe_button = QPushButton("◎  God's Eye View")
+        globe_button.setObjectName("secondaryButton")
+        globe_button.setToolTip("Open a local geospatial globe workspace.")
+        globe_button.clicked.connect(self.open_gods_eye_view)
+
         sidebar_layout.addWidget(brand)
         sidebar_layout.addWidget(subtitle)
         sidebar_layout.addSpacing(18)
@@ -346,6 +351,7 @@ class HomerWindow(QMainWindow):
         sidebar_layout.addWidget(chat_button)
         sidebar_layout.addWidget(future_button)
         sidebar_layout.addWidget(vision_button)
+        sidebar_layout.addWidget(globe_button)
         sidebar_layout.addStretch()
 
         footer = QLabel("HOMER DESKTOP\nVersion 0.1.0")
@@ -441,6 +447,26 @@ class HomerWindow(QMainWindow):
         self.voice_window.showMaximized()
         self.voice_window.raise_()
         self.voice_window.activateWindow()
+
+    def open_gods_eye_view(self):
+        """Open the optional local God’s Eye View service."""
+        import os
+        import webbrowser
+        from urllib.parse import urlparse
+
+        url = os.getenv("HOMER_GLOBE_URL", "http://127.0.0.1:4173").strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            self.set_status("Invalid HOMER_GLOBE_URL. Use a local HTTP(S) URL.")
+            return
+        if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            self.set_status("For safety, the globe launcher only opens localhost URLs.")
+            return
+
+        webbrowser.open(url)
+        self.set_status(
+            "Opening the local globe in your browser. Start the globe service first."
+        )
 
     def handle_voice_mode_switch(self, mode: str):
         """Route explicit voice commands to the requested desktop mode."""

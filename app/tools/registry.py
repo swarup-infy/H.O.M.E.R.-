@@ -192,7 +192,7 @@ def _open_website(arguments: dict[str, Any]) -> dict[str, Any]:
         if executable:
             subprocess.Popen([executable, url], shell=False)
         else:
-            opened = webbrowser.open(url, new=2)
+            opened = webbrowser.open(url, new=0)
             if not opened:
                 return {"ok": False, "error": "Windows could not open the default browser."}
         return {"ok": True, "message": f"Opened {site.title()}" + (f" search for {query.strip()!r}." if query.strip() else "."), "url": url}

@@ -38,16 +38,20 @@ Open `http://127.0.0.1:8000/docs`. Use `GET /health` or send
 ### Voice task controls
 
 HOMER exposes a small allowlist of desktop actions through the AI tool interface:
-open supported websites and search (using the default browser's existing tab where supported), launch Notepad, close or minimize the focused
-window, close one named Brave/Chrome/Spotify/YouTube/Notepad window, resolve a YouTube search to a direct watch page, send Windows media play/pause/next/previous keys, and seek the focused
-YouTube tab to a requested timestamp. For YouTube seeking, focus the video tab
-first. Closing a window sends Alt+F4 and may display an unsaved-work prompt.
+open supported websites and search (reusing an existing browser window when detected), launch Notepad, close or minimize the focused
+window, close one named Brave/Chrome/Spotify/YouTube/Notepad window, resolve a YouTube search to a direct watch page, inspect the active window's accessible controls, click a named visible control, send Windows media play/pause/next/previous keys, and seek the focused YouTube tab to a requested timestamp. Screen interaction prefers Windows UI Automation and uses a hosted vision model to locate coordinates when UIA cannot expose a target. For YouTube seeking, focus the video tab first.
 
-The AI may chain a maximum of four tool actions in one request. This is a
-bounded sequence, not a general-purpose autonomous agent; opening Spotify search results does not guarantee playback. YouTube play requests now resolve a first matching watch URL, but browser autoplay settings may still prevent playback; the full screen-grounded click-and-verify loop is not implemented yet.
+The AI may chain a maximum of four tool actions in one request. This is a bounded sequence, not unrestricted computer control. When asked to play a YouTube video, HOMER can resolve a watch URL, inspect accessible controls, and attempt to activate a visible Play control; the model must still verify the result and browser autoplay restrictions may apply. Spotify search results do not guarantee playback.
 Check each action's result before relying on it. Never use the assistant to
 close a window containing unsaved work unless you are prepared to handle the
 application's confirmation prompt.
+
+### Screen awareness and computer use
+
+- `inspect_screen` lists the active window and up to 100 accessible UI controls. This read does not upload a screenshot.
+- `click_screen_target` tries Windows UI Automation first. If the target isn't exposed accessibly, HOMER sends a downsized screenshot to the configured Groq vision model to locate a requested control, then clicks only when the model returns valid in-bounds coordinates and confidence at or above 0.72.
+- `close_named_window` requests closure of one matching visible window. Unsaved-work dialogs may still require user action.
+- Screen-grounded clicks operate the user's real desktop. Keep the desktop unlocked, review the target before sensitive actions, and use the mouse-corner PyAutoGUI failsafe to abort coordinate automation.
 
 ### Screen awareness (one screenshot at a time)
 

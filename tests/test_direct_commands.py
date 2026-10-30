@@ -1,4 +1,5 @@
 """Tests for deterministic routing of explicit desktop commands."""
+import asyncio
 from unittest.mock import patch
 
 from app.ai import groq_client
@@ -38,7 +39,7 @@ def test_non_action_question_stays_with_llm():
     assert groq_client._direct_desktop_command("What is machine learning?") is None
 
 
-async def test_direct_command_executes_without_api_key():
+def test_direct_command_executes_without_api_key():
     with (
         patch.object(groq_client, "get_settings") as get_settings,
         patch.object(groq_client, "execute_tool", return_value={
@@ -48,6 +49,6 @@ async def test_direct_command_executes_without_api_key():
         }) as execute,
     ):
         get_settings.return_value.groq_api_key = ""
-        reply = await groq_client.ask_homer("Play Harriet song")
+        reply = asyncio.run(groq_client.ask_homer("Play Harriet song"))
     execute.assert_called_once_with("play_youtube_video", {"query": "harriet"})
     assert "attempted to start playback" in reply

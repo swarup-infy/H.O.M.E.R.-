@@ -1,0 +1,5 @@
+# Optional webcam hand tracking / air mouse (Windows)
+mediapipe>=0.10.14,<0.10.22
+numpy>=1.24,<2.0
+opencv-python>=4.8,<5.0
+pyautogui>=0.9.54,<1.0

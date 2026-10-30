@@ -1,76 +1,92 @@
-# JARVIS API MVP
+# H.O.M.E.R. — API-first Windows desktop assistant
 
-A first, deliberately small Windows desktop-assistant backend. It uses Groq for language-model responses and has one allowlisted local action: opening Notepad. It does **not** yet include a GUI, microphone, webcam, memory, web search, or arbitrary shell/PowerShell execution.
+H.O.M.E.R. is a small Windows assistant backend using Groq for chat and a
+strict allowlist for local actions. Optional voice transcription and gesture
+recognition can be installed separately.
 
-## 1. Requirements
+## Architecture
 
-- Windows 10/11, 64-bit
-- Python 3.11 recommended for the broader project roadmap
-- A Groq API key and internet access for AI responses
+- `app/main.py` — FastAPI backend
+- `app/ai/groq_client.py` — hosted Groq API integration
+- `app/tools/registry.py` — allowlisted local actions
+- `app/voice/transcriber.py` — optional faster-whisper speech transcription
+- `app/vision/gestures.py` — optional MediaPipe gesture recognition
 
-Check installed Python versions in PowerShell:
+The chat model remains hosted; no local LLM is required. Optional models are
+loaded only when the corresponding feature is called.
 
-```powershell
-py -0p
-```
-
-## 2. Create an environment
-
-Open PowerShell in this folder:
+## Quick start (Windows PowerShell)
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
-
-If Python 3.11 is not installed, install it or use a Python version supported by the chosen libraries. Do not mix this project's dependencies into another project's virtual environment.
-
-If PowerShell blocks activation, use this for the current terminal session only:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-## 3. Configure the API key
-
-```powershell
 Copy-Item .env.example .env
 notepad .env
 ```
 
-Replace `GROQ_API_KEY=replace_me` with your key. Keep `.env` private and never commit it to Git. `GROQ_MODEL` must be a model ID currently available to your Groq account; model availability and pricing may change.
-
-## 4. Run the backend
+Put your Groq key in `.env`; never commit it. Start the backend:
 
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/docs` in your browser.
+Open `http://127.0.0.1:8000/docs`. Use `GET /health` or send
+`POST /chat` with JSON: `{"message":"Say hello"}`.
 
-- `GET /health` confirms the backend is alive and whether the key setting is present (it never returns the key).
-- `POST /chat` accepts `{"message":"Say hello"}`.
-- Try `{"message":"Open Notepad"}` to test the single approved desktop action on Windows.
+### Voice task controls
 
-Keep the server bound to `127.0.0.1` during development. Do not expose it directly to a public network.
+HOMER exposes a small allowlist of desktop actions through the AI tool interface:
+open supported websites and search (using the default browser's existing tab where supported), launch Notepad, close or minimize the focused
+window, close one named Brave/Chrome/Spotify/YouTube/Notepad window, resolve a YouTube search to a direct watch page, send Windows media play/pause/next/previous keys, and seek the focused
+YouTube tab to a requested timestamp. For YouTube seeking, focus the video tab
+first. Closing a window sends Alt+F4 and may display an unsaved-work prompt.
 
-## 5. Run unit tests
+The AI may chain a maximum of four tool actions in one request. This is a
+bounded sequence, not a general-purpose autonomous agent; opening Spotify search results does not guarantee playback. YouTube play requests now resolve a first matching watch URL, but browser autoplay settings may still prevent playback; the full screen-grounded click-and-verify loop is not implemented yet.
+Check each action's result before relying on it. Never use the assistant to
+close a window containing unsaved work unless you are prepared to handle the
+application's confirmation prompt.
 
-In another PowerShell terminal with the virtual environment active:
+### Screen awareness (one screenshot at a time)
+
+Click **Ask about screen**, confirm the privacy prompt, then enter a question.
+HOMER captures a single screenshot, downsizes it, and sends it to the configured
+Groq vision model. The screenshot is not saved to disk by this feature. Do not
+share screens containing passwords, private messages, financial data, or other
+sensitive information. Set `GROQ_VISION_MODEL` in `.env` to a vision-capable
+model available to your Groq account (default: `qwen/qwen3.8-27b`).
+
+### Optional voice input
 
 ```powershell
-pytest -q
+pip install -r requirements-voice.txt
 ```
 
-These tests validate the action registry without opening real applications. The live Groq API has not been tested as part of this scaffold; it requires your own key and a model your account can access.
+See [voice input docs](app/voice/README.md). First transcription may download
+model weights.
 
-## Safety limits
+### Optional hand mouse
 
-- No arbitrary shell, PowerShell or Python execution.
-- Only the `open_notepad` tool is registered.
-- The tool accepts no arguments and only runs on Windows.
-- The API key stays in the backend `.env` file.
-- Do not add file deletion, message sending, installation or shutdown actions without explicit validation and confirmation.
+```powershell
+pip install -r requirements-vision.txt
+```
+
+Use **Export conversation** to save the current chat as a Markdown file, and **New conversation** to clear the backend's short-term context as well as the visible chat. Click **Gesture controls** in the desktop sidebar to start the webcam air mouse.
+Raise your index finger to move the pointer, pinch thumb and index to click,
+and raise index + middle fingers to scroll. Pause or close the window to stop
+tracking. See [gesture docs](app/vision/README.md). Camera access is opt-in;
+frames are processed locally and are not sent to the AI provider.
+
+## Safety and privacy
+
+- Bind the development server to `127.0.0.1`.
+- The Groq key stays in local `.env`; `/health` never returns the key.
+- Tools are allowlisted; no arbitrary shell, PowerShell, or Python execution.
+- Microphone and camera access must be explicitly started by the caller.
+- Hand tracking only starts after an explicit user action. Webcam frames are processed locally; closing the hand-mouse window releases the camera. Mouse actions are limited to pointer movement, click, and scroll.
+
+## Attribution
+
+See [docs/COMPONENTS.md](docs/COMPONENTS.md) for source projects and licensing.

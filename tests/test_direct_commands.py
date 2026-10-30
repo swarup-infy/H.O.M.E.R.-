@@ -52,3 +52,15 @@ def test_direct_command_executes_without_api_key():
         reply = asyncio.run(groq_client.ask_homer("Play Harriet song"))
     execute.assert_called_once_with("play_youtube_video", {"query": "harriet"})
     assert "attempted to start playback" in reply
+
+
+def test_edge_close_command_routes_directly():
+    assert groq_client._direct_desktop_command("Close Microsoft Edge") == (
+        "close_named_window", {"application": "edge"}
+    )
+
+
+def test_song_by_artist_phrase_removes_generic_song_words():
+    assert groq_client._direct_desktop_command("Play a song by Arijit Singh") == (
+        "play_youtube_video", {"query": "arijit singh"}
+    )

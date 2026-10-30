@@ -220,6 +220,12 @@ class GestureMouseWindow(QMainWindow):
                 f"Camera {self._camera_index}."
             )
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Reopening the window should restart the webcam after it was released.
+        if self._capture is None:
+            self._start_camera()
+
     def toggle_pause(self):
         self._paused = not self._paused
         self._pinch_down = False

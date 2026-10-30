@@ -7,9 +7,8 @@ import binascii
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.ai.vision_client import ask_about_image
-
 from app.ai.groq_client import AIProviderNotConfigured, ask_homer, clear_history
+from app.ai.vision_client import ask_about_image
 from app.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -58,8 +57,6 @@ async def reset_chat() -> dict[str, str]:
     """Clear HOMER's short-term conversation context for a fresh chat."""
     await clear_history()
     return {"status": "ok", "message": "Conversation context cleared."}
-
-
 
 
 @app.post("/screen/ask", response_model=ChatResponse)

@@ -457,9 +457,20 @@ class HomerWindow(QMainWindow):
             self.voice_window = VoiceAssistantWindow(self)
 
         self.voice_window.mode_switch.connect(self.handle_voice_mode_switch)
+        self.voice_window.screen_request.connect(self.handle_voice_screen_request)
         self.voice_window.showMaximized()
         self.voice_window.raise_()
         self.voice_window.activateWindow()
+
+    def handle_voice_screen_request(self, spoken_request: str):
+        """Route a spoken screen-awareness request through the explicit-consent flow."""
+        if self.voice_window is not None:
+            self.voice_window.hide()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        self.set_status("Screen analysis requested. Confirm before sharing a screenshot.")
+        self.ask_about_screen()
 
     def open_gesture_controls(self):
         """Open the opt-in webcam air-mouse controller."""

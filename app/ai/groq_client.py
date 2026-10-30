@@ -64,7 +64,7 @@ async def ask_homer(user_message: str) -> str:
             tools=TOOL_DEFINITIONS,
             tool_choice="auto",
             temperature=0.2,
-            max_completion_tokens=500,
+            max_completion_tokens=300,
         )
 
         assistant_message = first_response.choices[0].message

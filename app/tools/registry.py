@@ -265,6 +265,7 @@ def _close_named_window(arguments: dict[str, Any]) -> dict[str, Any]:
     import ctypes
     from ctypes import wintypes
     user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
     matches: list[int] = []
     enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     def callback(hwnd: int, _param: int) -> bool:
@@ -272,7 +273,22 @@ def _close_named_window(arguments: dict[str, Any]) -> dict[str, Any]:
             length = user32.GetWindowTextLengthW(hwnd)
             title = ctypes.create_unicode_buffer(length + 1)
             user32.GetWindowTextW(hwnd, title, length + 1)
-            if app in title.value.lower():
+            title_matches = app in title.value.lower()
+            process_matches = False
+            if app in {"brave", "chrome"}:
+                pid = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                process = kernel32.OpenProcess(0x1000, False, pid.value)
+                if process:
+                    try:
+                        image = ctypes.create_unicode_buffer(1024)
+                        size = wintypes.DWORD(len(image))
+                        if kernel32.QueryFullProcessImageNameW(process, 0, image, ctypes.byref(size)):
+                            exe = image.value.replace("/", "\\").rsplit("\\", 1)[-1].lower()
+                            process_matches = exe == ("brave.exe" if app == "brave" else "chrome.exe")
+                    finally:
+                        kernel32.CloseHandle(process)
+            if process_matches or (app not in {"brave", "chrome"} and title_matches):
                 matches.append(int(hwnd))
         return True
     user32.EnumWindows(enum_proc(callback), 0)

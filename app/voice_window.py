@@ -480,6 +480,17 @@ class VoiceTask(QObject):
                     self.state.emit("LISTENING")
                     continue
                 self.transcript.emit(message)
+                normalized_message = " ".join(message.lower().replace("'", "").split())
+                screen_phrases = (
+                    "whats on my screen", "what is on my screen",
+                    "look at my screen", "read my screen", "can you see my screen",
+                    "analyze my screen", "describe my screen", "look at the screen",
+                    "what do you see on my screen", "help me with this screen",
+                )
+                if any(phrase in normalized_message for phrase in screen_phrases):
+                    self.screen_request.emit(message)
+                    self.stop()
+                    return
                 command = self._parse_mode_command(message)
                 if command:
                     self.mode_command.emit(command)
@@ -509,6 +520,7 @@ class VoiceAssistantWindow(QMainWindow):
     """Immersive, full-screen HOMER interface with two bottom controls."""
 
     mode_switch = Signal(str)
+    screen_request = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)

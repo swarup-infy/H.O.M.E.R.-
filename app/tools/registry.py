@@ -8,6 +8,7 @@ from __future__ import annotations
 import platform
 import shutil
 import subprocess
+import time
 import webbrowser
 from typing import Any
 from urllib.parse import quote_plus
@@ -307,13 +308,31 @@ def _play_youtube_video(arguments: dict[str, Any]) -> dict[str, Any]:
         first = next((item for item in (entries or []) if item), None)
         if not first or not first.get("id"):
             return {"ok": False, "error": "No matching YouTube video was found."}
-        url = "https://www.youtube.com/watch?v=" + first["id"]
+        # Request autoplay, then explicitly try to activate the visible player control.
+        # Browser autoplay policies vary, so the click result is reported separately.
+        url = "https://www.youtube.com/watch?v=" + first["id"] + "&autoplay=1"
         reused = _navigate_existing_browser(url, "default")
         if not reused:
             opened = webbrowser.open(url, new=0)
             if not opened:
                 return {"ok": False, "error": "Windows could not open the YouTube video."}
-        return {"ok": True, "message": "Opened the first matching YouTube watch page" + (" in the existing browser window." if reused else ".") + " Autoplay depends on browser and YouTube settings.", "url": url, "reused_window": reused}
+        playback = {"ok": False, "error": "Playback click was not attempted on this platform."}
+        if platform.system() == "Windows":
+            time.sleep(2.5)
+            try:
+                from app.tools.computer_use import click_screen_target
+                playback = click_screen_target("Play button on the YouTube video player")
+            except Exception as exc:
+                playback = {"ok": False, "error": "Playback interaction failed (" + type(exc).__name__ + ")."}
+        return {
+            "ok": True,
+            "message": "Found and opened the matching YouTube video.",
+            "url": url,
+            "reused_window": reused,
+            "playback_attempted": platform.system() == "Windows",
+            "playback_action": playback,
+            "note": "A successful click is not proof that audio is playing; check the player state."
+        }
     except Exception as exc:
         return {"ok": False, "error": "YouTube search/open failed (" + type(exc).__name__ + "). Install or update yt-dlp if needed."}
 

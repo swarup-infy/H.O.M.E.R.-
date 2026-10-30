@@ -44,6 +44,12 @@ class AIProviderNotConfigured(RuntimeError):
     """Raised when the API key is missing."""
 
 
+async def clear_history() -> None:
+    """Forget the in-memory conversation so the next chat starts clean."""
+    async with _history_lock:
+        _history.clear()
+
+
 async def ask_homer(user_message: str) -> str:
     """Send a message to Groq with bounded short-term conversation context."""
     settings = get_settings()

@@ -96,6 +96,27 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "inspect_screen",
+            "description": "Inspect the current Windows screen and return the active window and accessible UI control names. Use when the user asks what is visible or before interacting with a visible control.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "click_screen_target",
+            "description": "Click one visible screen control by its human-readable name, for example Play, Pause, Search, or a specific video title. Uses Windows UI Automation first and vision-grounded coordinates as fallback. Only use when the user explicitly asks to click or interact with that target.",
+            "parameters": {
+                "type": "object",
+                "properties": {"target": {"type": "string", "minLength": 1, "maxLength": 160}},
+                "required": ["target"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "close_active_window",
             "description": "Close the currently focused window using Alt+F4. Use only when the user explicitly asks to close the current window. Unsaved work may trigger an application confirmation.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
@@ -389,7 +410,20 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     if name == "play_youtube_video":
         return _play_youtube_video(arguments)
     if name == "close_named_window":
-        return _close_named_window(arguments)
+        if set(arguments) != {"application"}:
+            return {"ok": False, "error": "Choose the application window to close."}
+        from app.tools.computer_use import close_window
+        return close_window(arguments["application"])
+    if name == "inspect_screen":
+        if arguments:
+            return {"ok": False, "error": "inspect_screen accepts no arguments."}
+        from app.tools.computer_use import inspect_screen
+        return inspect_screen()
+    if name == "click_screen_target":
+        if set(arguments) != {"target"} or not isinstance(arguments.get("target"), str):
+            return {"ok": False, "error": "Provide one target description."}
+        from app.tools.computer_use import click_screen_target
+        return click_screen_target(arguments["target"])
     allowed = {"open_notepad", "close_active_window", "minimize_active_window",
                "media_play_pause", "media_next_track", "media_previous_track",
                "seek_youtube_to_time"}

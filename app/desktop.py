@@ -328,14 +328,9 @@ class HomerWindow(QMainWindow):
         vision_button = QPushButton("◇  Gesture controls")
         vision_button.setObjectName("secondaryButton")
         vision_button.setToolTip(
-            "Gesture integration will be added in a later step."
+            "Control the mouse pointer, click, and scroll with your hand."
         )
-
-        vision_button.clicked.connect(
-            lambda: self.set_status(
-                "Gesture controls are not implemented yet."
-            )
-        )
+        vision_button.clicked.connect(self.open_gesture_controls)
 
         globe_button = QPushButton("◎  God's Eye View")
         globe_button.setObjectName("secondaryButton")
@@ -448,6 +443,27 @@ class HomerWindow(QMainWindow):
         self.voice_window.raise_()
         self.voice_window.activateWindow()
 
+    def open_gesture_controls(self):
+        """Open the opt-in webcam air-mouse controller."""
+        try:
+            from app.vision.mouse_control import GestureMouseWindow
+
+            if not hasattr(self, "gesture_window") or self.gesture_window is None:
+                self.gesture_window = GestureMouseWindow(self)
+            self.gesture_window.show()
+            self.gesture_window.raise_()
+            self.gesture_window.activateWindow()
+            self.set_status("Hand mouse active. Close its window to release the camera.")
+        except ImportError as exc:
+            self.set_status(
+                "Gesture dependencies are missing. Run: "
+                "python -m pip install -r requirements-vision.txt"
+            )
+            self.add_message("HOMER", str(exc))
+        except Exception as exc:
+            self.set_status(f"Could not start hand controls: {exc}")
+            self.add_message("HOMER", f"Could not start hand controls: {exc}")
+
     def open_gods_eye_view(self):
         """Open the optional local God’s Eye View service."""
         import os
@@ -483,15 +499,7 @@ class HomerWindow(QMainWindow):
             self.showNormal()
             self.raise_()
             self.activateWindow()
-            self.set_status(
-                "Gesture mode requested. Camera-based gesture controls "
-                "are not implemented yet."
-            )
-            self.add_message(
-                "HOMER",
-                "Gesture mode is not available yet. The voice command was "
-                "recognized, but camera gesture controls still need to be built."
-            )
+            self.open_gesture_controls()
 
     def add_message(self, speaker: str, message: str):
         bubble = MessageBubble(speaker, message)

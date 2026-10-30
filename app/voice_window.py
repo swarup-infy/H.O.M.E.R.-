@@ -62,9 +62,22 @@ class AnimatedHomerCore(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.fillRect(self.rect(), QColor("#080d19"))
-
         w, h = self.width(), self.height()
+        # Deep midnight background with a restrained blue atmospheric glow.
+        background = QRadialGradient(w * 0.5, h * 0.43, max(w, h) * 0.78)
+        background.setColorAt(0.0, QColor("#0a1930"))
+        background.setColorAt(0.55, QColor("#050d1b"))
+        background.setColorAt(1.0, QColor("#01040b"))
+        painter.fillRect(self.rect(), background)
+
+        # Very subtle star-grid gives depth without making the UI noisy.
+        painter.setPen(QPen(QColor(70, 160, 220, 18), 1))
+        grid_step = 48
+        for gx in range(0, w, grid_step):
+            painter.drawLine(gx, 0, gx, h)
+        for gy in range(0, h, grid_step):
+            painter.drawLine(0, gy, w, gy)
+
         cx, cy = w / 2, h / 2 - 4
         radius = min(w, h) * 0.34
         pulse = 1.0 + 0.025 * math.sin(math.radians(self.phase * 2.0))
@@ -124,8 +137,10 @@ class AnimatedHomerCore(QWidget):
 
         # Electric arcs overlap the core while HOMER is speaking.
         if self.mode in ("SPEAKING", "LISTENING"):
-            intensity = 1.0 if self.mode == "SPEAKING" else 0.4
-            for arc_index in range(9 if intensity == 1.0 else 4):
+            # Listening uses a restrained electric corona; speaking produces
+            # brighter, irregular pulses so the core feels alive rather than mechanical.
+            intensity = 1.0 if self.mode == "SPEAKING" else 0.34
+            for arc_index in range(9 if intensity == 1.0 else 5):
                 angle = self.phase * (1.4 + arc_index * 0.13) + arc_index * 47
                 arc_radius = radius * (0.43 + (arc_index % 4) * 0.14)
                 painter.save()
@@ -144,26 +159,39 @@ class AnimatedHomerCore(QWidget):
                 painter.drawEllipse(QRectF(arc_radius * 1.06 - 2, -2, 4, 4))
                 painter.restore()
 
-            if self.mode == "SPEAKING":
-                # Short, branching lightning bolts flash across the logo itself.
-                for bolt in range(12):
-                    angle = math.radians(bolt * 30 + self.phase * 2.8)
-                    inner = radius * (0.12 + 0.08 * (bolt % 3))
-                    outer = radius * (0.48 + 0.14 * (bolt % 2))
-                    x1, y1 = cx + math.cos(angle) * inner, cy + math.sin(angle) * inner
-                    x2, y2 = cx + math.cos(angle) * outer, cy + math.sin(angle) * outer
-                    bolt_path = QPainterPath()
-                    bolt_path.moveTo(x1, y1)
-                    for segment in range(1, 5):
-                        t = segment / 5
-                        bx = x1 + (x2 - x1) * t + math.sin(math.radians(self.phase * 7 + bolt * 31 + segment * 83)) * radius * 0.07
-                        by = y1 + (y2 - y1) * t + math.cos(math.radians(self.phase * 6 + bolt * 43 + segment * 61)) * radius * 0.07
+            # Lightning is asymmetric and intermittent-looking: fewer, sharper
+            # branches while listening, fuller flashes while HOMER speaks.
+            bolt_count = 12 if self.mode == "SPEAKING" else 5
+            bolt_intensity = 1.0 if self.mode == "SPEAKING" else 0.36
+            for bolt in range(bolt_count):
+                angle = math.radians(bolt * (360 / bolt_count) + self.phase * (2.8 if bolt_intensity == 1.0 else -0.8))
+                inner = radius * (0.18 + 0.09 * (bolt % 3))
+                outer = radius * ((0.50 + 0.12 * (bolt % 2)) if bolt_intensity == 1.0 else 0.43)
+                x1, y1 = cx + math.cos(angle) * inner, cy + math.sin(angle) * inner
+                x2, y2 = cx + math.cos(angle) * outer, cy + math.sin(angle) * outer
+                bolt_path = QPainterPath()
+                bolt_path.moveTo(x1, y1)
+                for segment in range(1, 5):
+                    t = segment / 5
+                    # Multiple harmonics create uneven, branching-looking arcs.
+                    jitter_x = math.sin(math.radians(self.phase * 7 + bolt * 31 + segment * 83))
+                    jitter_y = math.cos(math.radians(self.phase * 6 + bolt * 43 + segment * 61))
+                    bx = x1 + (x2 - x1) * t + jitter_x * radius * 0.075
+                    by = y1 + (y2 - y1) * t + jitter_y * radius * 0.075
+                    bolt_path.lineTo(bx, by)
+                    if segment == 2 and bolt_intensity > 0.8 and bolt % 3 == 0:
+                        bolt_path.lineTo(
+                            bx + math.cos(angle + 0.7) * radius * 0.12,
+                            by + math.sin(angle + 0.7) * radius * 0.12,
+                        )
                         bolt_path.lineTo(bx, by)
-                    bolt_path.lineTo(x2, y2)
-                    painter.setPen(QPen(QColor(0, 130, 255, 105), 5))
-                    painter.drawPath(bolt_path)
-                    painter.setPen(QPen(QColor(145, 250, 255, 235), 1.5))
-                    painter.drawPath(bolt_path)
+                bolt_path.lineTo(x2, y2)
+                glow_alpha = int(110 * bolt_intensity)
+                core_alpha = int(235 * bolt_intensity)
+                painter.setPen(QPen(QColor(0, 130, 255, glow_alpha), 5 if bolt_intensity > 0.8 else 2.5))
+                painter.drawPath(bolt_path)
+                painter.setPen(QPen(QColor(175, 250, 255, core_alpha), 1.5 if bolt_intensity > 0.8 else 0.9))
+                painter.drawPath(bolt_path)
 
         # Logo is kept crisp and contained inside the innermost ring.
         logo_size = radius * 1.42
@@ -487,18 +515,26 @@ class VoiceAssistantWindow(QMainWindow):
         self.setWindowTitle("HOMER")
         self.setMinimumSize(760, 520)
         self.setStyleSheet("""
-            QMainWindow, QWidget#voiceRoot { background: #020712; color: #eafaff; }
+            QMainWindow, QWidget#voiceRoot { background: #030712; color: #edf8ff; }
             QLabel { background: transparent; }
             QPushButton#bottomControl {
-                min-height: 64px; max-height: 76px; min-width: 230px;
-                border-radius: 34px; padding: 10px 30px;
-                color: #eafaff; background: rgba(5, 24, 45, 225);
-                border: 2px solid #18dfff; font-size: 15px; font-weight: 700;
+                min-height: 60px; max-height: 72px; min-width: 225px;
+                border-radius: 30px; padding: 10px 28px;
+                color: #eafaff; background: rgba(8, 20, 38, 235);
+                border: 1px solid rgba(71, 211, 255, 190);
+                font-size: 14px; font-weight: 650;
             }
-            QPushButton#bottomControl:hover { background: rgba(8, 62, 91, 240); }
-            QPushButton#listenControl { border-color: #19dfff; }
-            QPushButton#listenControl[active="true"] { border-color: #ff477e; color: #fff0f5; }
-            QPushButton#chatControl { border-color: #9a6bff; }
+            QPushButton#bottomControl:hover {
+                background: rgba(13, 45, 73, 245);
+                border: 1px solid #8cf1ff;
+            }
+            QPushButton#bottomControl:pressed { background: rgba(12, 66, 91, 250); }
+            QPushButton#listenControl { border-color: #45dfff; }
+            QPushButton#listenControl[active="true"] {
+                border: 1px solid #ff5d91; color: #fff0f5;
+                background: rgba(63, 12, 36, 230);
+            }
+            QPushButton#chatControl { border-color: #a58aff; }
         """)
         self.thread: QThread | None = None
         self.worker: VoiceTask | None = None
@@ -512,10 +548,12 @@ class VoiceAssistantWindow(QMainWindow):
         layout.setContentsMargins(22, 18, 22, 22)
         layout.setSpacing(0)
 
-        # The status remains visually subtle; no title or instructional text.
-        self.state_label = QLabel("")
+        # A restrained HUD header makes the voice state legible without clutter.
+        self.state_label = QLabel("H O M E R   /   VOICE CORE")
         self.state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.state_label.setStyleSheet("color: #55edff; font-size: 11px; letter-spacing: 4px;")
+        self.state_label.setStyleSheet(
+            "color: #78dfff; font-size: 11px; letter-spacing: 3px; padding: 8px;"
+        )
         layout.addWidget(self.state_label)
         layout.addStretch(1)
 
@@ -627,10 +665,18 @@ class VoiceAssistantWindow(QMainWindow):
     @Slot(str)
     def _set_state(self, state: str) -> None:
         self.core.set_mode(state)
-        self.state_label.setText("• " + state + " •")
-        color = {"READY": "#55edff", "LISTENING": "#ff668e",
-                 "THINKING": "#a89bff", "SPEAKING": "#73f6b0"}.get(state, "#55edff")
-        self.state_label.setStyleSheet(f"color: {color}; font-size: 11px; letter-spacing: 4px;")
+        labels = {
+            "READY": "H O M E R   /   STANDBY",
+            "LISTENING": "H O M E R   /   LISTENING",
+            "THINKING": "H O M E R   /   THINKING",
+            "SPEAKING": "H O M E R   /   SPEAKING",
+        }
+        self.state_label.setText(labels.get(state, f"H O M E R   /   {state}"))
+        color = {"READY": "#78dfff", "LISTENING": "#ff789f",
+                 "THINKING": "#b8a5ff", "SPEAKING": "#8df8d0"}.get(state, "#78dfff")
+        self.state_label.setStyleSheet(
+            f"color: {color}; font-size: 11px; letter-spacing: 3px; padding: 8px;"
+        )
 
     @Slot(str)
     def _show_transcript(self, text: str) -> None:

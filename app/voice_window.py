@@ -162,6 +162,7 @@ class VoiceTask(QObject):
     reply = Signal(str)
     error = Signal(str)
     finished = Signal()
+    mode_command = Signal(str)
 
     def __init__(self, mode: str, text: str = "", speak_reply: bool = True):
         super().__init__()
@@ -238,6 +239,26 @@ class VoiceTask(QObject):
         except sr.RequestError as exc:
             raise RuntimeError("Speech recognition service is unavailable. Check your internet connection.") from exc
 
+    @staticmethod
+    def _parse_mode_command(message: str) -> str | None:
+        """Recognize explicit navigation commands without calling the LLM."""
+        import re
+        phrase = re.sub(r"[^a-z0-9 ]+", " ", message.lower())
+        phrase = " ".join(phrase.split())
+        text_commands = {
+            "switch to text mode", "open text mode", "go to text mode",
+            "text mode", "open text assistant", "switch to typing mode",
+        }
+        gesture_commands = {
+            "switch to gesture mode", "open gesture mode", "go to gesture mode",
+            "gesture mode", "enable gesture controls", "open gesture controls",
+        }
+        if phrase in text_commands:
+            return "text"
+        if phrase in gesture_commands:
+            return "gesture"
+        return None
+
     def _run_always_listen(self) -> None:
         sr, recognizer = self._recognizer()
         self.state.emit("LISTENING")
@@ -263,6 +284,10 @@ class VoiceTask(QObject):
                         self.state.emit("LISTENING")
                         continue
                     self.transcript.emit(message)
+                    command = self._parse_mode_command(message)
+                    if command:
+                        self.mode_command.emit(command)
+                        return
                     answer = self._ask(message)
                     self.reply.emit(answer)
                     self._speak(answer)
@@ -274,6 +299,8 @@ class VoiceTask(QObject):
 
 class VoiceAssistantWindow(QMainWindow):
     """Full-screen-feeling, animated HOMER voice experience."""
+
+    mode_switch = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -407,7 +434,7 @@ class VoiceAssistantWindow(QMainWindow):
         self.send_button.setEnabled(False)
         self.mic_button.setEnabled(False)
         self.clear_button.setEnabled(False)
-        self.always_button.setEnabled(mode != "always_listen")
+        self.always_button.setEnabled(True)
         self._set_state("LISTENING" if mode in ("listen", "always_listen") else "THINKING")
 
         self.thread = QThread(self)
@@ -415,6 +442,7 @@ class VoiceAssistantWindow(QMainWindow):
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
         self.worker.state.connect(self._set_state)
+        self.worker.mode_command.connect(self._on_mode_command)
         self.worker.transcript.connect(self._show_transcript)
         self.worker.reply.connect(self._show_reply)
         self.worker.error.connect(self._show_error)
@@ -437,6 +465,14 @@ class VoiceAssistantWindow(QMainWindow):
             "Always-listening is active. Click STOP LISTENING to pause microphone capture."
         )
         self._start_task("always_listen")
+
+    @Slot(str)
+    def _on_mode_command(self, mode: str) -> None:
+        """Pause voice capture and hand navigation to the desktop shell."""
+        self.transcript_label.setText(f"Switching to {mode} mode…")
+        if self.worker is not None:
+            self.worker.stop()
+        self.mode_switch.emit(mode)
 
     def listen(self) -> None:
         self.transcript_label.setText("Microphone is opening… speak after the listening indicator appears.")

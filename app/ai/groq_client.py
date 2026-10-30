@@ -87,6 +87,7 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
         query = play_match.group(1).strip(" .!?")
         query = re.sub(r"^(?:the\s+)?(?:song|track|music)\s+", "", query).strip()
         query = re.sub(r"^(?:a|an|the)\s+", "", query).strip()
+        query = re.sub(r"^(?:song|track|music)\s+", "", query).strip()
         query = re.sub(r"\s+(?:on|using)\s+(?:youtube|yt)$", "", query).strip()
         query = re.sub(r"\s+(?:song|music|track)$", "", query).strip() or play_match.group(1).strip(" .!?")
         if query and query not in {"music", "a song", "some music", "a song please"}:

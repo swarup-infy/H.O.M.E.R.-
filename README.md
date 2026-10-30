@@ -44,14 +44,17 @@ pip install -r requirements-voice.txt
 See [voice input docs](app/voice/README.md). First transcription may download
 model weights.
 
-### Optional gesture recognition
+### Optional hand mouse
 
 ```powershell
 pip install -r requirements-vision.txt
 ```
 
-See [gesture docs](app/vision/README.md). Download a compatible MediaPipe
-`.task` model separately. The camera is not accessed automatically.
+Click **Gesture controls** in the desktop sidebar to start the webcam air mouse.
+Raise your index finger to move the pointer, pinch thumb and index to click,
+and raise index + middle fingers to scroll. Pause or close the window to stop
+tracking. See [gesture docs](app/vision/README.md). Camera access is opt-in;
+frames are processed locally and are not sent to the AI provider.
 
 ## Safety and privacy
 

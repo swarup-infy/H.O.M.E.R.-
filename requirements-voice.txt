@@ -1,2 +1,9 @@
-# Optional local speech-to-text; separate from the API backend requirements
+# Optional voice features for the HOMER desktop app
+# On Windows, install in the project's active virtual environment.
+SpeechRecognition>=3.10,<4
+PyAudio>=0.2.14,<1.0
+pyttsx3>=2.90,<3
+
+# Optional local CPU speech-to-text (not required for the current Google
+# SpeechRecognition-based microphone flow).
 faster-whisper>=1.0,<2.0

@@ -24,6 +24,13 @@ Before redistributing upstream source code, fonts, assets, model files, or
 binaries, review the corresponding license. Models and assets can have terms
 that differ from the software package itself.
 
+
+- **God's Eye View** — https://github.com/bilawalsidhu/gods-eye-view
+  - MIT-licensed application source, reviewed as a geospatial visualization
+    reference. HOMER launches a separately installed local instance rather
+    than vendoring its large Cesium application. Third-party data, imagery,
+    models, and feeds retain their own licenses and provider terms.
+
 ## Resource-conscious defaults
 
 - Hosted Groq API for chat; no local LLM weights are required.

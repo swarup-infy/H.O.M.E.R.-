@@ -310,138 +310,95 @@ class VoiceTask(QObject):
 
 
 class VoiceAssistantWindow(QMainWindow):
-    """Full-screen-feeling, animated HOMER voice experience."""
+    """Immersive, full-screen HOMER interface with two bottom controls."""
 
     mode_switch = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.Window, True)
+        self.setWindowTitle("HOMER")
+        self.setMinimumSize(760, 520)
+        self.setStyleSheet("""
+            QMainWindow, QWidget#voiceRoot { background: #020712; color: #eafaff; }
+            QLabel { background: transparent; }
+            QPushButton#bottomControl {
+                min-height: 64px; max-height: 76px; min-width: 230px;
+                border-radius: 34px; padding: 10px 30px;
+                color: #eafaff; background: rgba(5, 24, 45, 225);
+                border: 2px solid #18dfff; font-size: 15px; font-weight: 700;
+            }
+            QPushButton#bottomControl:hover { background: rgba(8, 62, 91, 240); }
+            QPushButton#listenControl { border-color: #19dfff; }
+            QPushButton#listenControl[active="true"] { border-color: #ff477e; color: #fff0f5; }
+            QPushButton#chatControl { border-color: #9a6bff; }
+        """)
         self.thread: QThread | None = None
         self.worker: VoiceTask | None = None
         self._auto_listen_started = False
-        self.setWindowTitle("HOMER | Voice Interface")
-        self.resize(1120, 780)
-        self.setMinimumSize(820, 650)
-        self.setStyleSheet("""
-            QMainWindow, QWidget#voiceRoot { background: #080d19; color: #edf7ff; }
-            QLabel { background: transparent; }
-            QLabel#eyebrow { color: #4ee7ff; font-size: 11px; font-weight: 700; letter-spacing: 3px; }
-            QLabel#title { color: #f1f8ff; font-size: 34px; font-weight: 700; letter-spacing: 5px; }
-            QLabel#subtitle { color: #8398b8; font-size: 12px; }
-            QLabel#state { color: #55edff; font-size: 12px; font-weight: 700; letter-spacing: 3px; }
-            QLabel#transcript { color: #c4d8f3; font-size: 13px; }
-            QFrame#panel { background: #0d1728; border: 1px solid #203653; border-radius: 18px; }
-            QLineEdit { background: #101e32; border: 1px solid #294765; border-radius: 13px; padding: 14px 16px; color: #f4f9ff; selection-background-color: #147ca7; }
-            QLineEdit:focus { border: 1px solid #3bdcf4; }
-            QPushButton { background: #11263b; border: 1px solid #2b526d; border-radius: 12px; padding: 12px 17px; color: #d9f7ff; font-weight: 600; }
-            QPushButton:hover { background: #173751; border-color: #42dff7; }
-            QPushButton:disabled { color: #62758e; background: #111a28; border-color: #1c2a3b; }
-            QPushButton#mic { background: #073b52; border: 1px solid #35def4; color: #e8fdff; font-size: 14px; padding: 15px 22px; }
-            QPushButton#mic:hover { background: #0b526c; }
-            QPushButton#close { color: #8da1bd; background: transparent; border: 1px solid #24364d; padding: 7px 12px; }
-            QCheckBox { color: #9fb4d0; spacing: 8px; }
-            QCheckBox::indicator { width: 15px; height: 15px; }
-        """)
+        self._listening_requested = False
 
         root = QWidget()
         root.setObjectName("voiceRoot")
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(28, 22, 28, 22)
-        layout.setSpacing(12)
+        layout.setContentsMargins(22, 18, 22, 22)
+        layout.setSpacing(0)
 
-        header = QHBoxLayout()
-        brand = QLabel("H O M E R")
-        brand.setObjectName("eyebrow")
-        self.connection = QLabel("● LOCAL API ASSISTANT")
-        self.connection.setObjectName("subtitle")
-        close_button = QPushButton("←  BACK")
-        close_button.setObjectName("close")
-        close_button.clicked.connect(self.close)
-        header.addWidget(brand)
-        header.addStretch()
-        header.addWidget(self.connection)
-        header.addSpacing(18)
-        header.addWidget(close_button)
-        layout.addLayout(header)
-
-        title = QLabel("VOICE INTERFACE")
-        title.setObjectName("title")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle = QLabel("ALWAYS-ON VOICE MODE • MICROPHONE STATUS ALWAYS VISIBLE")
-        subtitle.setObjectName("subtitle")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        # The status remains visually subtle; no title or instructional text.
+        self.state_label = QLabel("")
+        self.state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.state_label.setStyleSheet("color: #55edff; font-size: 11px; letter-spacing: 4px;")
+        layout.addWidget(self.state_label)
+        layout.addStretch(1)
 
         self.core = AnimatedHomerCore()
-        layout.addWidget(self.core, 1)
+        layout.addWidget(self.core, 8)
 
-        self.state_label = QLabel("●  READY")
-        self.state_label.setObjectName("state")
-        self.state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.transcript_label = QLabel("Tap the microphone and speak to HOMER.")
-        self.transcript_label.setObjectName("transcript")
+        self.transcript_label = QLabel("")
         self.transcript_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.transcript_label.setWordWrap(True)
-        layout.addWidget(self.state_label)
+        self.transcript_label.setMaximumHeight(42)
+        self.transcript_label.setStyleSheet("color: #b9eaff; font-size: 12px;")
         layout.addWidget(self.transcript_label)
-
-        panel = QFrame()
-        panel.setObjectName("panel")
-        panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(16, 14, 16, 14)
-        panel_layout.setSpacing(10)
-
-        self.reply_label = QLabel("HOMER's response will appear here.")
-        self.reply_label.setWordWrap(True)
-        self.reply_label.setMinimumHeight(28)
-        self.reply_label.setMaximumHeight(72)
-        self.reply_label.setStyleSheet("color: #b4c9e4; font-size: 12px;")
-        panel_layout.addWidget(self.reply_label)
-
-        input_row = QHBoxLayout()
-        self.input = QLineEdit()
-        self.input.setPlaceholderText("Or type a message to HOMER...")
-        self.input.returnPressed.connect(self.send_text)
-        self.send_button = QPushButton("SEND  ↗")
-        self.send_button.clicked.connect(self.send_text)
-        self.mic_button = QPushButton("◉  LISTEN ONCE")
-        self.mic_button.setObjectName("mic")
-        self.mic_button.clicked.connect(self.listen)
-        input_row.addWidget(self.input, 1)
-        input_row.addWidget(self.send_button)
-        panel_layout.addLayout(input_row)
+        layout.addStretch(1)
 
         controls = QHBoxLayout()
-        self.always_button = QPushButton("◉  START ALWAYS LISTENING")
-        self.always_button.setObjectName("mic")
+        controls.setSpacing(26)
+        controls.addStretch(1)
+
+        self.always_button = QPushButton("◉   LISTENING OFF")
+        self.always_button.setObjectName("bottomControl")
+        self.always_button.setProperty("active", False)
+        self.always_button.setToolTip("Turn continuous listening on or off")
         self.always_button.clicked.connect(self.toggle_always_listening)
-        self.voice_reply = QCheckBox("Speak replies aloud")
-        self.voice_reply.setChecked(True)
-        self.voice_reply.setToolTip("Use your installed Windows text-to-speech voice.")
-        self.clear_button = QPushButton("CLEAR DISPLAY")
-        self.clear_button.clicked.connect(self.clear_display)
-        controls.addWidget(self.mic_button)
+
+        self.chat_button = QPushButton("▢   SWITCH TO CHAT")
+        self.chat_button.setObjectName("bottomControl")
+        self.chat_button.setProperty("active", False)
+        self.chat_button.setToolTip("Switch to the text chat interface")
+        self.chat_button.clicked.connect(lambda: self.mode_switch.emit("text"))
+
         controls.addWidget(self.always_button)
-        controls.addWidget(self.voice_reply)
-        controls.addStretch()
-        controls.addWidget(self.clear_button)
-        panel_layout.addLayout(controls)
+        controls.addWidget(self.chat_button)
+        controls.addStretch(1)
+        layout.addLayout(controls)
 
-        layout.addWidget(panel)
-
-        footer = QLabel("HOMER CORE  /  GROQ INTELLIGENCE  /  LOCAL DESKTOP")
-        footer.setObjectName("eyebrow")
-        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        footer.setStyleSheet("font-size: 9px; color: #526b89;")
-        layout.addWidget(footer)
+        self.input = QLineEdit()
+        self.send_button = QPushButton()
+        self.mic_button = QPushButton()
+        self.clear_button = QPushButton()
+        self.voice_reply = QCheckBox()
+        self.voice_reply.setChecked(True)
+        self.input.hide()
+        self.send_button.hide()
+        self.mic_button.hide()
+        self.clear_button.hide()
+        self.voice_reply.hide()
 
     def _start_task(self, mode: str, text: str = "") -> None:
         if self.thread is not None and self.thread.isRunning():
             return
-
+        self._listening_requested = mode == "always_listen"
         self.input.setEnabled(False)
         self.send_button.setEnabled(False)
         self.mic_button.setEnabled(False)
@@ -465,64 +422,59 @@ class VoiceAssistantWindow(QMainWindow):
         self.thread.start()
 
     def toggle_always_listening(self) -> None:
-        """Start or stop continuous microphone listening."""
+        """Use the single primary control to start or stop continuous listening."""
         if self.worker is not None and self.thread is not None and self.thread.isRunning():
             if self.worker.mode == "always_listen":
+                self._listening_requested = False
                 self.worker.stop()
-                self.always_button.setText("STOPPING…")
+                self.always_button.setText("◌   TURNING OFF")
                 self.always_button.setEnabled(False)
             return
-        self.always_button.setText("■  STOP LISTENING")
-        self.transcript_label.setText(
-            "Always-listening is active. Click STOP LISTENING to pause microphone capture."
-        )
+        self._listening_requested = True
+        self.always_button.setText("■   LISTENING ON")
+        self.always_button.setProperty("active", True)
+        self.always_button.style().unpolish(self.always_button)
+        self.always_button.style().polish(self.always_button)
         self._start_task("always_listen")
 
     @Slot(str)
     def _on_mode_command(self, mode: str) -> None:
-        """Pause voice capture and hand navigation to the desktop shell."""
-        self.transcript_label.setText(f"Switching to {mode} mode…")
+        self.transcript_label.setText(f"Switching to {mode}…")
         if self.worker is not None:
             self.worker.stop()
         self.mode_switch.emit(mode)
 
     def listen(self) -> None:
-        self.transcript_label.setText("Microphone is opening… speak after the listening indicator appears.")
         self._start_task("listen")
 
     def send_text(self) -> None:
         message = self.input.text().strip()
-        if not message:
-            return
-        self.transcript_label.setText(f"YOU  ›  {message}")
-        self.input.clear()
-        self._start_task("text", message)
+        if message:
+            self.input.clear()
+            self._start_task("text", message)
+
+    def clear_display(self) -> None:
+        self.transcript_label.clear()
 
     @Slot(str)
     def _set_state(self, state: str) -> None:
         self.core.set_mode(state)
-        self.state_label.setText(f"●  {state}")
-        color = {
-            "READY": "#55edff",
-            "LISTENING": "#ff668e",
-            "THINKING": "#a89bff",
-            "SPEAKING": "#73f6b0",
-        }.get(state, "#55edff")
-        self.state_label.setStyleSheet(f"color: {color}; font-size: 12px; font-weight: 700; letter-spacing: 3px;")
+        self.state_label.setText("• " + state + " •")
+        color = {"READY": "#55edff", "LISTENING": "#ff668e",
+                 "THINKING": "#a89bff", "SPEAKING": "#73f6b0"}.get(state, "#55edff")
+        self.state_label.setStyleSheet(f"color: {color}; font-size: 11px; letter-spacing: 4px;")
 
     @Slot(str)
     def _show_transcript(self, text: str) -> None:
-        self.transcript_label.setText(f"YOU  ›  {text}")
+        self.transcript_label.setText(text)
 
     @Slot(str)
     def _show_reply(self, text: str) -> None:
-        self.reply_label.setText(f"HOMER  ›  {text}")
-        self.transcript_label.setText("Message processed. HOMER has responded.")
+        self.transcript_label.setText(text)
 
     @Slot(str)
     def _show_error(self, message: str) -> None:
-        self.reply_label.setText(f"NOTICE  ›  {message}")
-        self.transcript_label.setText("Check the message above and try again.")
+        self.transcript_label.setText(message)
         self._set_state("READY")
 
     @Slot()
@@ -532,17 +484,17 @@ class VoiceAssistantWindow(QMainWindow):
         self.mic_button.setEnabled(True)
         self.clear_button.setEnabled(True)
         self.always_button.setEnabled(True)
-        self.always_button.setText("◉  START ALWAYS LISTENING")
-        if self.state_label.text().endswith("THINKING") or self.state_label.text().endswith("SPEAKING") or self.state_label.text().endswith("LISTENING"):
+        if self._listening_requested:
+            self.always_button.setText("■   LISTENING ON")
+            self.always_button.setProperty("active", True)
+        else:
+            self.always_button.setText("◉   LISTENING OFF")
+            self.always_button.setProperty("active", False)
             self._set_state("READY")
-        self.input.setFocus()
+        self.always_button.style().unpolish(self.always_button)
+        self.always_button.style().polish(self.always_button)
         self.worker = None
         self.thread = None
-
-    def clear_display(self) -> None:
-        self.transcript_label.setText("HOMER is ready.")
-        self.reply_label.setText("HOMER's response will appear here.")
-        self._set_state("READY")
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -561,7 +513,7 @@ class VoiceAssistantWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setApplicationName("HOMER Voice Assistant")
+    app.setApplicationName("HOMER")
     window = VoiceAssistantWindow()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec())

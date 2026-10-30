@@ -85,10 +85,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "close_named_window",
-            "description": "Close one window matching a named application, such as Brave, Chrome, Spotify, YouTube, or Notepad.",
+            "description": "Close one window matching a named application, such as Brave, Chrome, Edge, Firefox, Spotify, YouTube, or Notepad.",
             "parameters": {
                 "type": "object",
-                "properties": {"application": {"type": "string", "enum": ["brave", "chrome", "spotify", "youtube", "notepad"]}},
+                "properties": {"application": {"type": "string", "enum": ["brave", "chrome", "edge", "firefox", "spotify", "youtube", "notepad"]}},
                 "required": ["application"],
                 "additionalProperties": False,
             },
@@ -342,7 +342,7 @@ def _close_named_window(arguments: dict[str, Any]) -> dict[str, Any]:
     if set(arguments) != {"application"}:
         return {"ok": False, "error": "Choose an application window to close."}
     app = arguments.get("application")
-    if app not in {"brave", "chrome", "spotify", "youtube", "notepad"}:
+    if app not in {"brave", "chrome", "edge", "firefox", "spotify", "youtube", "notepad"}:
         return {"ok": False, "error": "Unsupported application name."}
     if platform.system() != "Windows":
         return {"ok": False, "error": "Named window controls are supported on Windows only."}

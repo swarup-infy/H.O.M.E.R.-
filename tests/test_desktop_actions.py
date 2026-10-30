@@ -54,3 +54,13 @@ def test_search_not_allowed_for_chatgpt():
         "open_website", {"site": "chatgpt", "search_query": "hello"}
     )
     assert result["ok"] is False
+
+
+def test_screen_tools_are_registered_and_validate_arguments():
+    assert registry.execute_tool("inspect_screen", {"unexpected": True})["ok"] is False
+    assert registry.execute_tool("click_screen_target", {})["ok"] is False
+    assert registry.execute_tool("close_named_window", {"application": "powershell"})["ok"] is False
+
+
+def test_unknown_computer_use_tool_is_rejected():
+    assert registry.execute_tool("read_all_files", {})["ok"] is False

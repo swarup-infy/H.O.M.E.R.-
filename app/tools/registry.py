@@ -70,6 +70,32 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "play_youtube_video",
+            "description": "Find the first matching YouTube video and open its watch page. Use when the user asks to play a named song or video on YouTube.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 200}},
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_named_window",
+            "description": "Close one window matching a named application, such as Brave, Chrome, Spotify, YouTube, or Notepad.",
+            "parameters": {
+                "type": "object",
+                "properties": {"application": {"type": "string", "enum": ["brave", "chrome", "spotify", "youtube", "notepad"]}},
+                "required": ["application"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "close_active_window",
             "description": "Close the currently focused window using Alt+F4. Use only when the user explicitly asks to close the current window. Unsaved work may trigger an application confirmation.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},

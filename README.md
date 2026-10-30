@@ -59,7 +59,7 @@ See [gesture docs](app/vision/README.md). Download a compatible MediaPipe
 - The Groq key stays in local `.env`; `/health` never returns the key.
 - Tools are allowlisted; no arbitrary shell, PowerShell, or Python execution.
 - Microphone and camera access must be explicitly started by the caller.
-- Gesture predictions do not directly trigger computer actions.
+- Hand tracking only starts after an explicit user action. Webcam frames are processed locally; closing the hand-mouse window releases the camera. Mouse actions are limited to pointer movement, click, and scroll.
 
 ## Attribution
 

@@ -38,14 +38,13 @@ Open `http://127.0.0.1:8000/docs`. Use `GET /health` or send
 ### Voice task controls
 
 HOMER exposes a small allowlist of desktop actions through the AI tool interface:
-open supported websites and search, launch Notepad, close or minimize the focused
-window, send Windows media play/pause/next/previous keys, and seek the focused
+open supported websites and search (using the default browser's existing tab where supported), launch Notepad, close or minimize the focused
+window, close one named Brave/Chrome/Spotify/YouTube/Notepad window, resolve a YouTube search to a direct watch page, send Windows media play/pause/next/previous keys, and seek the focused
 YouTube tab to a requested timestamp. For YouTube seeking, focus the video tab
 first. Closing a window sends Alt+F4 and may display an unsaved-work prompt.
 
 The AI may chain a maximum of four tool actions in one request. This is a
-bounded sequence, not a general-purpose autonomous agent; opening Spotify or
-YouTube search results does not guarantee a song/video will start playing.
+bounded sequence, not a general-purpose autonomous agent; opening Spotify search results does not guarantee playback. YouTube play requests now resolve a first matching watch URL, but browser autoplay settings may still prevent playback; the full screen-grounded click-and-verify loop is not implemented yet.
 Check each action's result before relying on it. Never use the assistant to
 close a window containing unsaved work unless you are prepared to handle the
 application's confirmation prompt.

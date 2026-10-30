@@ -321,7 +321,7 @@ def _play_youtube_video(arguments: dict[str, Any]) -> dict[str, Any]:
             time.sleep(2.5)
             try:
                 from app.tools.computer_use import click_screen_target
-                playback = click_screen_target("Play button on the YouTube video player")
+                playback = click_screen_target("Play")
             except Exception as exc:
                 playback = {"ok": False, "error": "Playback interaction failed (" + type(exc).__name__ + ")."}
         return {

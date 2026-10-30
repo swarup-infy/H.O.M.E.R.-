@@ -21,7 +21,7 @@ def test_extra_arguments_are_rejected():
 
 
 def test_youtube_search_encodes_query_and_uses_default_browser():
-    with patch.object(registry.webbrowser, "open", return_value=True) as open_browser:
+    with patch.object(registry, "_navigate_existing_browser", return_value=False), patch.object(registry.webbrowser, "open", return_value=True) as open_browser:
         result = registry.execute_tool(
             "open_website",
             {"site": "youtube", "search_query": "lofi music"},
@@ -32,7 +32,7 @@ def test_youtube_search_encodes_query_and_uses_default_browser():
 
 
 def test_spotify_search_encodes_query():
-    with patch.object(registry.webbrowser, "open", return_value=True) as open_browser:
+    with patch.object(registry, "_navigate_existing_browser", return_value=False), patch.object(registry.webbrowser, "open", return_value=True) as open_browser:
         result = registry.execute_tool(
             "open_website",
             {"site": "spotify", "search_query": "Arijit Singh"},

@@ -2,6 +2,8 @@
 
 import sys
 import html
+import base64
+import io
 
 import httpx
 
@@ -14,6 +16,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QFileDialog,
+    QMessageBox,
+    QInputDialog,
     QMainWindow,
     QPushButton,
     QScrollArea,
@@ -318,6 +322,11 @@ class HomerWindow(QMainWindow):
         export_button.setToolTip("Save this conversation as a Markdown file.")
         export_button.clicked.connect(self.export_conversation)
 
+        screen_button = QPushButton("▣  Ask about screen")
+        screen_button.setObjectName("secondaryButton")
+        screen_button.setToolTip("Capture one screenshot after confirmation and ask HOMER about it.")
+        screen_button.clicked.connect(self.ask_about_screen)
+
         tools_title = QLabel("WORKSPACE")
         tools_title.setObjectName("subtitle")
 
@@ -349,6 +358,7 @@ class HomerWindow(QMainWindow):
         sidebar_layout.addSpacing(18)
         sidebar_layout.addWidget(new_chat_button)
         sidebar_layout.addWidget(export_button)
+        sidebar_layout.addWidget(screen_button)
         sidebar_layout.addSpacing(20)
         sidebar_layout.addWidget(tools_title)
         sidebar_layout.addWidget(chat_button)
@@ -624,6 +634,73 @@ class HomerWindow(QMainWindow):
 
         self.worker = None
         self.thread = None
+
+
+    def ask_about_screen(self):
+        """Capture a single screenshot only after explicit consent, then send it for analysis."""
+        consent = QMessageBox.question(
+            self,
+            "Share screenshot with HOMER?",
+            "HOMER will capture one screenshot of your screen and send it to your configured Groq vision model for analysis. The image may contain private information. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if consent != QMessageBox.StandardButton.Yes:
+            self.set_status("Screenshot cancelled; nothing was captured or sent.")
+            return
+
+        prompt, accepted = QInputDialog.getText(
+            self,
+            "Ask about your screen",
+            "What should HOMER look for?",
+            text="Describe what is visible on my screen and help me with it.",
+        )
+        if not accepted or not prompt.strip():
+            self.set_status("Screen question cancelled.")
+            return
+
+        try:
+            import pyautogui
+            from PIL import Image
+
+            screenshot = pyautogui.screenshot()
+            screenshot.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            screenshot.convert("RGB").save(buffer, format="JPEG", quality=75, optimize=True)
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            image_data_url = "data:image/jpeg;base64," + encoded
+            if len(buffer.getvalue()) > 5_000_000:
+                self.set_status("Screenshot is too large to send safely. Try a lower screen resolution.")
+                return
+        except Exception as exc:
+            self.set_status(f"Could not capture screenshot: {exc}")
+            return
+
+        self.add_message("You", "[Screenshot shared for this question] " + prompt.strip())
+        self.message_input.setEnabled(False)
+        self.send_button.setEnabled(False)
+        self.set_status("HOMER is analyzing the screenshot...")
+
+        try:
+            response = httpx.post(
+                f"{API_BASE_URL}/screen/ask",
+                json={"prompt": prompt.strip(), "image_data_url": image_data_url},
+                timeout=90.0,
+            )
+            response.raise_for_status()
+            reply = response.json().get("reply", "").strip()
+            self.add_message("HOMER", reply or "The vision model returned an empty response.")
+            self.set_status("Screenshot analysis complete. The image was not saved by HOMER.")
+        except httpx.HTTPStatusError as exc:
+            self.add_message("HOMER", f"Screen analysis failed (HTTP {exc.response.status_code}). Check the API terminal and vision model configuration.")
+            self.set_status("Screen analysis failed.")
+        except httpx.HTTPError as exc:
+            self.add_message("HOMER", f"Could not reach HOMER's API: {exc}")
+            self.set_status("Screen analysis failed.")
+        finally:
+            self.message_input.setEnabled(True)
+            self.send_button.setEnabled(True)
+            self.message_input.setFocus()
 
     def export_conversation(self):
         """Export the visible conversation to a Markdown file."""

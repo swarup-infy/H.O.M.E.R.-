@@ -226,7 +226,7 @@ def click_screen_target(target: str) -> dict[str, Any]:
 
 
 def close_window(application: str) -> dict[str, Any]:
-    """Close one visible window, identifying browsers by process rather than tab title."""
+    """Close one named Windows app window using native Win32 window/process discovery."""
     error = _require_windows()
     if error:
         return error
@@ -234,55 +234,75 @@ def close_window(application: str) -> dict[str, Any]:
     process_names = {
         "brave": {"brave.exe"},
         "chrome": {"chrome.exe"},
+        "edge": {"msedge.exe"},
+        "firefox": {"firefox.exe"},
         "spotify": {"spotify.exe"},
         "notepad": {"notepad.exe"},
     }
-    title_aliases = {"youtube": ("youtube",), "spotify": ("spotify",), "notepad": ("notepad",)}
+    title_aliases = {
+        "youtube": ("youtube",),
+        "spotify": ("spotify",),
+        "notepad": ("notepad",),
+    }
     if app not in {*process_names, *title_aliases}:
         return {"ok": False, "error": "Unsupported application name."}
     try:
+        import ctypes
         import psutil
-        windows = _visible_windows()
-        matches = []
-        for window in windows:
-            title = _window_title(window).casefold()
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        matches: list[tuple[int, str]] = []
+        enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def callback(hwnd: int, _param: int) -> bool:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            title_buffer = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, title_buffer, length + 1)
+            title = title_buffer.value.strip()
+            if not title:
+                return True
             process_match = False
-            try:
-                process_name = psutil.Process(window.process_id()).name().casefold()
-                process_match = process_name in process_names.get(app, set())
-            except Exception:
-                pass
-            title_match = any(alias in title for alias in title_aliases.get(app, ()))
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if app in process_names and pid.value:
+                try:
+                    process_match = psutil.Process(pid.value).name().casefold() in process_names[app]
+                except (psutil.Error, OSError):
+                    process_match = False
+            title_match = any(alias in title.casefold() for alias in title_aliases.get(app, ()))
             if process_match or (app not in process_names and title_match):
-                matches.append(window)
+                matches.append((int(hwnd), title))
+            return True
+
+        user32.EnumWindows(enum_proc(callback), 0)
         if not matches:
             return {"ok": False, "error": "No visible " + app.title() + " window was found."}
-        # Prefer the active window when it is among matches; otherwise close the first match only.
-        try:
-            active = _desktop().get_active()
-            target = active if any(_window_title(active) == _window_title(w) for w in matches) else matches[0]
-        except Exception:
-            target = matches[0]
-        title = _window_title(target)
-        try:
-            target.close()
-        except Exception:
-            target.set_focus()
-            import pyautogui
-            pyautogui.hotkey("alt", "f4")
-        time.sleep(0.5)
-        still_visible = any(_window_title(w) == title for w in _visible_windows())
+
+        # Prefer the foreground window when it belongs to the requested app.
+        foreground = int(user32.GetForegroundWindow() or 0)
+        target_hwnd, title = next((item for item in matches if item[0] == foreground), matches[0])
+        user32.PostMessageW(target_hwnd, 0x0010, 0, 0)  # WM_CLOSE
+        deadline = time.time() + 1.5
+        while time.time() < deadline and user32.IsWindow(target_hwnd):
+            time.sleep(0.1)
+        still_open = bool(user32.IsWindow(target_hwnd))
         return {
-            "ok": not still_visible,
-            "message": ("Closed the requested window." if not still_visible else "Sent a close request, but the window is still visible."),
+            "ok": not still_open,
+            "message": "Closed the requested window." if not still_open else
+                "Sent a close request, but the window is still open. It may have an unsaved-work prompt.",
             "application": app,
             "window_title": title,
             "close_requested": True,
-            "still_visible_after_request": still_visible,
-            "note": "The app may ask about unsaved work." if still_visible else "The window no longer appears in the visible-window list."
+            "still_visible_after_request": still_open,
+            "note": "Windows may require confirmation before closing unsaved work." if still_open else
+                "The window handle is no longer open.",
         }
     except ImportError as exc:
-        return {"ok": False, "error": "Missing desktop automation dependency (" + str(exc.name) + ")."}
+        return {"ok": False, "error": "Missing desktop automation dependency (" + str(exc.name) + "). Install requirements.txt."}
     except Exception as exc:
         logger.exception("Named window close failed")
         return {"ok": False, "error": "Could not close the requested window (" + type(exc).__name__ + ")."}

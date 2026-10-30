@@ -111,9 +111,10 @@ def _speech_worker() -> None:
 
 
 def _ensure_worker() -> None:
-    global _speech_thread
+    global _speech_thread, _start_error
     with _start_lock:
         if _speech_thread is None or not _speech_thread.is_alive():
+            _start_error = None
             _ready.clear()
             _speech_thread = threading.Thread(
                 target=_speech_worker,

@@ -35,6 +35,21 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 Open `http://127.0.0.1:8000/docs`. Use `GET /health` or send
 `POST /chat` with JSON: `{"message":"Say hello"}`.
 
+### Voice task controls
+
+HOMER exposes a small allowlist of desktop actions through the AI tool interface:
+open supported websites and search, launch Notepad, close or minimize the focused
+window, send Windows media play/pause/next/previous keys, and seek the focused
+YouTube tab to a requested timestamp. For YouTube seeking, focus the video tab
+first. Closing a window sends Alt+F4 and may display an unsaved-work prompt.
+
+The AI may chain a maximum of four tool actions in one request. This is a
+bounded sequence, not a general-purpose autonomous agent; opening Spotify or
+YouTube search results does not guarantee a song/video will start playing.
+Check each action's result before relying on it. Never use the assistant to
+close a window containing unsaved work unless you are prepared to handle the
+application's confirmation prompt.
+
 ### Screen awareness (one screenshot at a time)
 
 Click **Ask about screen**, confirm the privacy prompt, then enter a question.

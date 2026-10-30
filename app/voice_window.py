@@ -156,6 +156,38 @@ class AnimatedHomerCore(QWidget):
             painter.setBrush(color)
             painter.drawRoundedRect(QRectF(x, bar_y - height / 2, 3, height), 1.5, 1.5)
 
+        # Animated starfield and holographic floor rings fill the widescreen scene.
+        for i in range(58):
+            seed_x = (i * 137.5) % max(1, w)
+            seed_y = (i * 83.7) % max(1, h)
+            drift = (self.phase * (0.16 + (i % 4) * 0.07))
+            px = (seed_x + drift * (1 if i % 2 else -1)) % max(1, w)
+            py = (seed_y + math.sin(math.radians(self.phase + i * 19)) * 9) % max(1, h)
+            alpha = 70 + int(100 * abs(math.sin(math.radians(self.phase * 1.7 + i * 23))))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(45, 198, 255, alpha))
+            size = 1.2 + (i % 3) * 0.55
+            painter.drawEllipse(QRectF(px, py, size, size))
+
+        floor_y = h * 0.83
+        painter.save()
+        painter.translate(cx, floor_y)
+        for i in range(7):
+            floor_width = min(w * 0.82, radius * (2.7 + i * 0.48))
+            floor_height = 12 + i * 5
+            floor_color = QColor("#19cfff" if i % 2 == 0 else "#e9a94b")
+            floor_color.setAlpha(max(24, 95 - i * 9))
+            painter.setPen(QPen(floor_color, 1.0))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(QRectF(-floor_width / 2, -floor_height / 2, floor_width, floor_height))
+        painter.restore()
+
+        # A softly animated scanning beam sweeps through the core.
+        scan_y = cy - radius + (2 * radius) * ((self.phase % 180) / 180.0)
+        scan_color = QColor(50, 225, 255, 34)
+        painter.setPen(QPen(scan_color, 2.0))
+        painter.drawLine(int(cx - radius * 0.88), int(scan_y), int(cx + radius * 0.88), int(scan_y))
+
         painter.end()
 
 

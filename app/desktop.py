@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QFileDialog,
     QMainWindow,
     QPushButton,
     QScrollArea,
@@ -140,6 +141,7 @@ class HomerWindow(QMainWindow):
         self.thread = None
         self.worker = None
         self.voice_window = None
+        self.conversation_messages = []
 
         self.setWindowTitle("HOMER | Desktop AI Assistant")
         self.resize(1100, 760)
@@ -311,6 +313,11 @@ class HomerWindow(QMainWindow):
         new_chat_button.setObjectName("secondaryButton")
         new_chat_button.clicked.connect(self.new_conversation)
 
+        export_button = QPushButton("⇩  Export conversation")
+        export_button.setObjectName("secondaryButton")
+        export_button.setToolTip("Save this conversation as a Markdown file.")
+        export_button.clicked.connect(self.export_conversation)
+
         tools_title = QLabel("WORKSPACE")
         tools_title.setObjectName("subtitle")
 
@@ -341,6 +348,7 @@ class HomerWindow(QMainWindow):
         sidebar_layout.addWidget(subtitle)
         sidebar_layout.addSpacing(18)
         sidebar_layout.addWidget(new_chat_button)
+        sidebar_layout.addWidget(export_button)
         sidebar_layout.addSpacing(20)
         sidebar_layout.addWidget(tools_title)
         sidebar_layout.addWidget(chat_button)
@@ -502,6 +510,7 @@ class HomerWindow(QMainWindow):
             self.open_gesture_controls()
 
     def add_message(self, speaker: str, message: str):
+        self.conversation_messages.append((speaker, message))
         bubble = MessageBubble(speaker, message)
 
         row = QHBoxLayout()
@@ -616,8 +625,42 @@ class HomerWindow(QMainWindow):
         self.worker = None
         self.thread = None
 
+    def export_conversation(self):
+        """Export the visible conversation to a Markdown file."""
+        if not self.conversation_messages:
+            self.set_status("There is no conversation to export yet.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export HOMER conversation",
+            "homer-conversation.md",
+            "Markdown files (*.md);;Text files (*.txt)",
+        )
+        if not path:
+            return
+
+        lines = ["# HOMER Conversation", ""]
+        for speaker, message in self.conversation_messages:
+            lines.extend([f"## {speaker}", "", message, ""])
+
+        try:
+            with open(path, "w", encoding="utf-8", newline="\n") as file:
+                file.write("\n".join(lines))
+            self.set_status(f"Conversation exported to {path}")
+        except OSError as exc:
+            self.set_status(f"Could not export conversation: {exc}")
+
     def new_conversation(self):
-        # Clear visible chat without changing backend code.
+        # Clear visible chat and short-term AI context.
+        try:
+            response = httpx.post(f"{API_BASE_URL}/chat/reset", timeout=3.0)
+            response.raise_for_status()
+        except httpx.HTTPError:
+            self.set_status("Could not reset AI context; check that the API is online.")
+            return
+
+        self.conversation_messages.clear()
         while self.chat_layout.count() > 1:
             item = self.chat_layout.takeAt(0)
 

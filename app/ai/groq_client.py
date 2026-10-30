@@ -72,6 +72,10 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
     if re.search(r"\b(?:close|shut)\s+(?:the\s+)?(?:current\s+)?window\b", text):
         return "close_active_window", {}
 
+    click_match = re.search(r"\bclick\s+(?:on\s+)?(?:the\s+)?(.+)", text)
+    if click_match:
+        return "click_screen_target", {"target": click_match.group(1).strip(" .!?")[:160]}
+
     # Play a named song/video: route directly to the actual watch-page tool.
     play_match = re.search(
         r"\b(?:please\s+)?(?:play|put on|start playing)\s+(?:me\s+)?(.+)",
@@ -96,10 +100,6 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
         return "media_next_track", {}
     if re.search(r"\b(?:previous|last)\s+(?:song|track)\b", text):
         return "media_previous_track", {}
-
-    click_match = re.search(r"\bclick\s+(?:on\s+)?(?:the\s+)?(.+)", text)
-    if click_match:
-        return "click_screen_target", {"target": click_match.group(1).strip(" .!?")[:160]}
 
     if re.search(r"\b(?:what(?:'s| is) on my screen|inspect my screen|look at my screen)\b", text):
         return "inspect_screen", {}

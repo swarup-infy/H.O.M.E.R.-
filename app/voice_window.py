@@ -5,11 +5,12 @@ from __future__ import annotations
 import math
 import os
 import sys
+import threading
 from pathlib import Path
 
 import httpx
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot, Qt, QRectF
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QRadialGradient
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -154,7 +155,7 @@ class AnimatedHomerCore(QWidget):
 
 
 class VoiceTask(QObject):
-    """Run microphone, API, and speech work away from the UI thread."""
+    """Run voice and API work in a worker thread."""
 
     state = Signal(str)
     transcript = Signal(str)
@@ -167,69 +168,40 @@ class VoiceTask(QObject):
         self.mode = mode
         self.text = text
         self.speak_reply = speak_reply
+        self._stop_event = threading.Event()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+
+    def _ask(self, message: str) -> str:
+        response = httpx.post(f"{API_BASE_URL}/chat", json={"message": message}, timeout=90.0)
+        response.raise_for_status()
+        return str(response.json().get("reply", "")).strip() or "I received an empty response."
+
+    def _speak(self, answer: str) -> None:
+        if self.speak_reply:
+            self.state.emit("SPEAKING")
+            from app.voice.speaker import speak
+            speak(answer)
 
     @Slot()
     def run(self) -> None:
         try:
-            message = self.text.strip()
-            if self.mode == "listen":
-                self.state.emit("LISTENING")
-                try:
-                    import speech_recognition as sr
-                except ImportError as exc:
-                    raise RuntimeError(
-                        "Voice recognition is not installed. Run: "
-                        "pip install SpeechRecognition pyaudio"
-                    ) from exc
-
-                recognizer = sr.Recognizer()
-                recognizer.dynamic_energy_threshold = True
-                recognizer.pause_threshold = 0.8
-                try:
-                    with sr.Microphone() as source:
-                        recognizer.adjust_for_ambient_noise(source, duration=0.45)
-                        audio = recognizer.listen(source, timeout=8, phrase_time_limit=18)
-                    self.state.emit("THINKING")
-                    message = recognizer.recognize_google(audio, language="en-IN").strip()
-                except sr.WaitTimeoutError as exc:
-                    raise RuntimeError("I didn't hear anything. Tap the microphone and try again.") from exc
-                except sr.UnknownValueError as exc:
-                    raise RuntimeError("I couldn't understand that. Please speak clearly and try again.") from exc
-                except sr.RequestError as exc:
-                    raise RuntimeError("Speech recognition service is unavailable. Check your internet connection.") from exc
-                self.transcript.emit(message)
-
-            if not message:
-                raise RuntimeError("Type a message or use the microphone first.")
-
-            self.state.emit("THINKING")
-            response = httpx.post(
-                f"{API_BASE_URL}/chat",
-                json={"message": message},
-                timeout=90.0,
-            )
-            response.raise_for_status()
-            answer = str(response.json().get("reply", "")).strip()
-            if not answer:
-                answer = "I received an empty response from the AI service."
-            self.reply.emit(answer)
-
-            if self.speak_reply:
-                self.state.emit("SPEAKING")
-                try:
-                    from app.voice.speaker import speak
-                    speak(answer)
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"HOMER replied, but text-to-speech failed: {exc}"
-                    ) from exc
-
-            self.state.emit("READY")
-
+            if self.mode == "always_listen":
+                self._run_always_listen()
+            else:
+                message = self.text.strip()
+                if self.mode == "listen":
+                    message = self._listen_once()
+                    self.transcript.emit(message)
+                if not message:
+                    raise RuntimeError("Type a message or use the microphone first.")
+                self.state.emit("THINKING")
+                answer = self._ask(message)
+                self.reply.emit(answer)
+                self._speak(answer)
         except httpx.ConnectError:
-            self.error.emit(
-                "Cannot reach HOMER's API. Start the FastAPI server on 127.0.0.1:8000."
-            )
+            self.error.emit("Cannot reach HOMER's API. Start the FastAPI server on 127.0.0.1:8000.")
         except httpx.TimeoutException:
             self.error.emit("HOMER took too long to respond. Please try again.")
         except httpx.HTTPStatusError as exc:
@@ -237,7 +209,67 @@ class VoiceTask(QObject):
         except Exception as exc:
             self.error.emit(str(exc) or "An unexpected voice-assistant error occurred.")
         finally:
+            self.state.emit("READY")
             self.finished.emit()
+
+    def _recognizer(self):
+        try:
+            import speech_recognition as sr
+        except ImportError as exc:
+            raise RuntimeError("Install voice support: python -m pip install -r requirements-voice.txt") from exc
+        recognizer = sr.Recognizer()
+        recognizer.dynamic_energy_threshold = True
+        recognizer.pause_threshold = 0.8
+        return sr, recognizer
+
+    def _listen_once(self) -> str:
+        sr, recognizer = self._recognizer()
+        self.state.emit("LISTENING")
+        try:
+            with sr.Microphone() as source:
+                recognizer.adjust_for_ambient_noise(source, duration=0.4)
+                audio = recognizer.listen(source, timeout=8, phrase_time_limit=18)
+            self.state.emit("THINKING")
+            return recognizer.recognize_google(audio, language="en-IN").strip()
+        except sr.WaitTimeoutError as exc:
+            raise RuntimeError("I didn't hear anything. Try again.") from exc
+        except sr.UnknownValueError as exc:
+            raise RuntimeError("I couldn't understand that. Please speak clearly.") from exc
+        except sr.RequestError as exc:
+            raise RuntimeError("Speech recognition service is unavailable. Check your internet connection.") from exc
+
+    def _run_always_listen(self) -> None:
+        sr, recognizer = self._recognizer()
+        self.state.emit("LISTENING")
+        try:
+            with sr.Microphone() as source:
+                recognizer.adjust_for_ambient_noise(source, duration=0.6)
+                while not self._stop_event.is_set():
+                    try:
+                        audio = recognizer.listen(source, timeout=1, phrase_time_limit=12)
+                    except sr.WaitTimeoutError:
+                        continue
+                    if self._stop_event.is_set():
+                        break
+                    self.state.emit("THINKING")
+                    try:
+                        message = recognizer.recognize_google(audio, language="en-IN").strip()
+                    except sr.UnknownValueError:
+                        self.state.emit("LISTENING")
+                        continue
+                    except sr.RequestError as exc:
+                        raise RuntimeError("Speech recognition service is unavailable. Check your internet connection.") from exc
+                    if not message:
+                        self.state.emit("LISTENING")
+                        continue
+                    self.transcript.emit(message)
+                    answer = self._ask(message)
+                    self.reply.emit(answer)
+                    self._speak(answer)
+                    if not self._stop_event.is_set():
+                        self.state.emit("LISTENING")
+        finally:
+            self.state.emit("READY")
 
 
 class VoiceAssistantWindow(QMainWindow):
@@ -248,6 +280,7 @@ class VoiceAssistantWindow(QMainWindow):
         self.setWindowFlag(Qt.WindowType.Window, True)
         self.thread: QThread | None = None
         self.worker: VoiceTask | None = None
+        self._auto_listen_started = False
         self.setWindowTitle("HOMER | Voice Interface")
         self.resize(1120, 780)
         self.setMinimumSize(820, 650)
@@ -297,7 +330,7 @@ class VoiceAssistantWindow(QMainWindow):
         title = QLabel("VOICE INTERFACE")
         title.setObjectName("title")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle = QLabel("YOUR PERSONAL AI • ALWAYS READY TO LISTEN")
+        subtitle = QLabel("ALWAYS-ON VOICE MODE • MICROPHONE STATUS ALWAYS VISIBLE")
         subtitle.setObjectName("subtitle")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
@@ -335,7 +368,7 @@ class VoiceAssistantWindow(QMainWindow):
         self.input.returnPressed.connect(self.send_text)
         self.send_button = QPushButton("SEND  ↗")
         self.send_button.clicked.connect(self.send_text)
-        self.mic_button = QPushButton("◉  LISTEN NOW")
+        self.mic_button = QPushButton("◉  LISTEN ONCE")
         self.mic_button.setObjectName("mic")
         self.mic_button.clicked.connect(self.listen)
         input_row.addWidget(self.input, 1)
@@ -343,12 +376,16 @@ class VoiceAssistantWindow(QMainWindow):
         panel_layout.addLayout(input_row)
 
         controls = QHBoxLayout()
+        self.always_button = QPushButton("◉  START ALWAYS LISTENING")
+        self.always_button.setObjectName("mic")
+        self.always_button.clicked.connect(self.toggle_always_listening)
         self.voice_reply = QCheckBox("Speak replies aloud")
         self.voice_reply.setChecked(True)
         self.voice_reply.setToolTip("Use your installed Windows text-to-speech voice.")
         self.clear_button = QPushButton("CLEAR DISPLAY")
         self.clear_button.clicked.connect(self.clear_display)
         controls.addWidget(self.mic_button)
+        controls.addWidget(self.always_button)
         controls.addWidget(self.voice_reply)
         controls.addStretch()
         controls.addWidget(self.clear_button)
@@ -370,7 +407,8 @@ class VoiceAssistantWindow(QMainWindow):
         self.send_button.setEnabled(False)
         self.mic_button.setEnabled(False)
         self.clear_button.setEnabled(False)
-        self._set_state("LISTENING" if mode == "listen" else "THINKING")
+        self.always_button.setEnabled(mode != "always_listen")
+        self._set_state("LISTENING" if mode in ("listen", "always_listen") else "THINKING")
 
         self.thread = QThread(self)
         self.worker = VoiceTask(mode, text, self.voice_reply.isChecked())
@@ -385,6 +423,20 @@ class VoiceAssistantWindow(QMainWindow):
         self.thread.finished.connect(self._task_finished)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.start()
+
+    def toggle_always_listening(self) -> None:
+        """Start or stop continuous microphone listening."""
+        if self.worker is not None and self.thread is not None and self.thread.isRunning():
+            if self.worker.mode == "always_listen":
+                self.worker.stop()
+                self.always_button.setText("STOPPING…")
+                self.always_button.setEnabled(False)
+            return
+        self.always_button.setText("■  STOP LISTENING")
+        self.transcript_label.setText(
+            "Always-listening is active. Click STOP LISTENING to pause microphone capture."
+        )
+        self._start_task("always_listen")
 
     def listen(self) -> None:
         self.transcript_label.setText("Microphone is opening… speak after the listening indicator appears.")
@@ -431,6 +483,8 @@ class VoiceAssistantWindow(QMainWindow):
         self.send_button.setEnabled(True)
         self.mic_button.setEnabled(True)
         self.clear_button.setEnabled(True)
+        self.always_button.setEnabled(True)
+        self.always_button.setText("◉  START ALWAYS LISTENING")
         if self.state_label.text().endswith("THINKING") or self.state_label.text().endswith("SPEAKING") or self.state_label.text().endswith("LISTENING"):
             self._set_state("READY")
         self.input.setFocus()
@@ -438,9 +492,23 @@ class VoiceAssistantWindow(QMainWindow):
         self.thread = None
 
     def clear_display(self) -> None:
-        self.transcript_label.setText("Tap the microphone and speak to HOMER.")
+        self.transcript_label.setText("HOMER is ready.")
         self.reply_label.setText("HOMER's response will appear here.")
         self._set_state("READY")
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if not self._auto_listen_started:
+            self._auto_listen_started = True
+            QTimer.singleShot(900, self.toggle_always_listening)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        if self.worker is not None:
+            self.worker.stop()
+        if self.thread is not None and self.thread.isRunning():
+            self.thread.quit()
+            self.thread.wait(1500)
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":

@@ -69,10 +69,12 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
         app = close_app.group(1)
         app = "chrome" if app == "google chrome" else app
         return "close_named_window", {"application": app}
-    if re.search(r"\b(?:close|shut)\s+(?:the\s+)?(?:current\s+)?window\b", text):
+    if re.search(r"\b(?:close|shut)\s+(?:the\s+)?(?:(?:current|whole|entire)\s+)?window\b", text):
         return "close_active_window", {}
 
-    click_match = re.search(r"\bclick\s+(?:on\s+)?(?:the\s+)?(.+)", text)
+    # Check explicit click requests before song playback: "click the Play button"
+    # contains the word "play" but is a UI action, not a song request.
+    click_match = re.search(r"^click\s+(?:on\s+)?(?:the\s+)?(.+)", text)
     if click_match:
         return "click_screen_target", {"target": click_match.group(1).strip(" .!?")[:160]}
 

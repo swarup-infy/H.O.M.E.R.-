@@ -124,9 +124,7 @@ def _find_control(target: str) -> tuple[Any | None, str | None]:
     best_rank = candidates[0][0]
     best = [row for row in candidates if row[0] == best_rank]
     if len(best) > 1:
-        distinct = {row[2].casefold() for row in best}
-        if len(distinct) > 1:
-            return None, "More than one visible control matches that description. Please be more specific."
+        return None, "More than one visible control matches that description. Please be more specific."
     return best[0][1], None
 
 
@@ -140,6 +138,7 @@ def _vision_click(target: str) -> dict[str, Any]:
     if not settings.groq_api_key or settings.groq_api_key == "replace_me":
         return {"ok": False, "error": "Vision fallback needs GROQ_API_KEY."}
     screenshot = pyautogui.screenshot()
+    original_width, original_height = screenshot.size
     screenshot.thumbnail((1280, 900))
     import io
     buffer = io.BytesIO()
@@ -184,10 +183,12 @@ def _vision_click(target: str) -> dict[str, Any]:
         confidence = data.get("confidence", 0)
         if not isinstance(confidence, (int, float)) or confidence < 0.72:
             return {"ok": False, "error": "The target was not identified with enough confidence to click safely."}
-        pyautogui.click(int(x), int(y))
+        screen_x = round(float(x) * original_width / width)
+        screen_y = round(float(y) * original_height / height)
+        pyautogui.click(screen_x, screen_y)
         time.sleep(0.8)
         return {"ok": True, "method": "vision_coordinate", "target": target,
-                "clicked_at": {"x": int(x), "y": int(y)},
+                "clicked_at": {"x": screen_x, "y": screen_y},
                 "message": "Clicked the visually identified target. Verify the resulting screen before claiming the requested task completed."}
     except Exception as exc:
         logger.exception("Vision-grounded click failed")

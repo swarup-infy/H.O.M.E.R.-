@@ -1,9 +1,13 @@
 ﻿"""FastAPI entry point for the HOMER API-first MVP."""
 
 import logging
+import base64
+import binascii
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.ai.vision_client import ask_about_image
 
 from app.ai.groq_client import AIProviderNotConfigured, ask_homer, clear_history
 from app.config import get_settings
@@ -30,6 +34,12 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class ScreenQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    prompt: str = Field(min_length=1, max_length=1000)
+    image_data_url: str = Field(min_length=1, max_length=8_000_000)
+
+
 @app.get("/health")
 async def health() -> dict[str, str | bool]:
     """Report app status without exposing credentials."""
@@ -48,6 +58,29 @@ async def reset_chat() -> dict[str, str]:
     """Clear HOMER's short-term conversation context for a fresh chat."""
     await clear_history()
     return {"status": "ok", "message": "Conversation context cleared."}
+
+
+
+
+@app.post("/screen/ask", response_model=ChatResponse)
+async def screen_ask(request: ScreenQuestion) -> ChatResponse:
+    """Analyze one user-selected screenshot; never capture the screen on the server."""
+    prefix = "data:image/jpeg;base64,"
+    if not request.image_data_url.startswith(prefix):
+        raise HTTPException(status_code=422, detail="Expected a JPEG data URL.")
+    encoded = request.image_data_url[len(prefix):]
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid screenshot encoding.") from exc
+    if not image_bytes or len(image_bytes) > 5_000_000:
+        raise HTTPException(status_code=413, detail="Screenshot must be under 5 MB.")
+    try:
+        reply = await ask_about_image(request.prompt.strip(), request.image_data_url)
+        return ChatResponse(reply=reply)
+    except RuntimeError as exc:
+        logging.getLogger(__name__).exception("Screen vision request failed")
+        raise HTTPException(status_code=502, detail="Vision request failed. Check server logs, model access, and API configuration.") from exc
 
 
 @app.post("/chat", response_model=ChatResponse)

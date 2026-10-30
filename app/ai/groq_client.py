@@ -2,6 +2,7 @@
 
 import json
 import logging
+import asyncio
 from typing import Any
 
 from groq import AsyncGroq
@@ -10,6 +11,11 @@ from app.config import get_settings
 from app.tools.registry import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
+
+# Keep only a small recent window so follow-up questions have context.
+_MAX_HISTORY_MESSAGES = 12
+_history: list[dict[str, Any]] = []
+_history_lock = asyncio.Lock()
 
 SYSTEM_PROMPT = """You are HOMER, a friendly, intelligent Windows desktop AI assistant.
 
@@ -33,7 +39,7 @@ class AIProviderNotConfigured(RuntimeError):
 
 
 async def ask_homer(user_message: str) -> str:
-    """Send a message to Groq and execute at most one approved tool call."""
+    """Send a message to Groq with bounded short-term conversation context."""
     settings = get_settings()
 
     if not settings.groq_api_key or settings.groq_api_key == "replace_me":
@@ -43,8 +49,11 @@ async def ask_homer(user_message: str) -> str:
 
     client = AsyncGroq(api_key=settings.groq_api_key)
 
+    async with _history_lock:
+        history = list(_history)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *history,
         {"role": "user", "content": user_message},
     ]
 
@@ -62,7 +71,14 @@ async def ask_homer(user_message: str) -> str:
         tool_calls = assistant_message.tool_calls or []
 
         if not tool_calls:
-            return assistant_message.content or "I couldn't generate a text response."
+            answer = assistant_message.content or "I couldn't generate a text response."
+            async with _history_lock:
+                _history.extend([
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": answer},
+                ])
+                del _history[:-_MAX_HISTORY_MESSAGES]
+            return answer
 
         # Execute at most one tool call in this MVP.
         tool_call = tool_calls[0]
@@ -95,8 +111,14 @@ async def ask_homer(user_message: str) -> str:
             max_completion_tokens=500,
         )
 
-        final_text = final_response.choices[0].message.content
-        return final_text or json.dumps(tool_result)
+        final_text = final_response.choices[0].message.content or json.dumps(tool_result)
+        async with _history_lock:
+            _history.extend([
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": final_text},
+            ])
+            del _history[:-_MAX_HISTORY_MESSAGES]
+        return final_text
 
     except Exception as exc:
         logger.exception("Groq request failed (%s)", type(exc).__name__)

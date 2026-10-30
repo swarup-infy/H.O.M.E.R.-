@@ -1,5 +1,6 @@
 """Tests for HOMER's allowlisted desktop actions."""
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from app.tools import registry
 
@@ -64,3 +65,30 @@ def test_screen_tools_are_registered_and_validate_arguments():
 
 def test_unknown_computer_use_tool_is_rejected():
     assert registry.execute_tool("read_all_files", {})["ok"] is False
+
+
+
+def test_play_youtube_video_attempts_player_interaction():
+    fake_ytdlp = MagicMock()
+    fake_ytdlp.__enter__.return_value.extract_info.return_value = {
+        "entries": [{"id": "test-video-id"}]
+    }
+    fake_module = SimpleNamespace(YoutubeDL=MagicMock(return_value=fake_ytdlp))
+    playback = {"ok": True, "method": "vision_coordinate", "target": "Play button"}
+
+    with (
+        patch.dict("sys.modules", {"yt_dlp": fake_module}),
+        patch.object(registry.platform, "system", return_value="Windows"),
+        patch.object(registry.time, "sleep"),
+        patch.object(registry, "_navigate_existing_browser", return_value=True),
+        patch("app.tools.computer_use.click_screen_target", return_value=playback) as click,
+    ):
+        result = registry.execute_tool(
+            "play_youtube_video", {"query": "Arijit Singh Kesariya"}
+        )
+
+    assert result["ok"] is True
+    assert result["url"] == "https://www.youtube.com/watch?v=test-video-id&autoplay=1"
+    assert result["playback_attempted"] is True
+    assert result["playback_action"] == playback
+    click.assert_called_once_with("Play button on the YouTube video player")

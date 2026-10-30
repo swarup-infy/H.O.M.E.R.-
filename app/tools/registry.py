@@ -226,6 +226,62 @@ def _open_website(arguments: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": f"Could not open the requested website ({type(exc).__name__})."}
 
 
+
+def _play_youtube_video(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the first YouTube search result to a direct watch URL."""
+    if set(arguments) != {"query"}:
+        return {"ok": False, "error": "Provide only a video or song query."}
+    query = arguments.get("query")
+    if not isinstance(query, str) or not query.strip() or len(query) > 200:
+        return {"ok": False, "error": "Query must be 1-200 characters."}
+    try:
+        import yt_dlp
+        options = {"quiet": True, "no_warnings": True, "skip_download": True,
+                   "extract_flat": True, "default_search": "ytsearch1"}
+        with yt_dlp.YoutubeDL(options) as ydl:
+            result = ydl.extract_info("ytsearch1:" + query.strip(), download=False)
+        entries = result.get("entries") if isinstance(result, dict) else None
+        first = next((item for item in (entries or []) if item), None)
+        if not first or not first.get("id"):
+            return {"ok": False, "error": "No matching YouTube video was found."}
+        url = "https://www.youtube.com/watch?v=" + first["id"]
+        opened = webbrowser.open(url, new=0)
+        if not opened:
+            return {"ok": False, "error": "Windows could not open the YouTube video."}
+        return {"ok": True, "message": "Opened the first matching YouTube watch page. Autoplay depends on browser and YouTube settings.", "url": url}
+    except Exception as exc:
+        return {"ok": False, "error": "YouTube search/open failed (" + type(exc).__name__ + "). Install or update yt-dlp if needed."}
+
+
+def _close_named_window(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Ask Windows to close one visible top-level window with a matching title."""
+    if set(arguments) != {"application"}:
+        return {"ok": False, "error": "Choose an application window to close."}
+    app = arguments.get("application")
+    if app not in {"brave", "chrome", "spotify", "youtube", "notepad"}:
+        return {"ok": False, "error": "Unsupported application name."}
+    if platform.system() != "Windows":
+        return {"ok": False, "error": "Named window controls are supported on Windows only."}
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    matches: list[int] = []
+    enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def callback(hwnd: int, _param: int) -> bool:
+        if user32.IsWindowVisible(hwnd):
+            length = user32.GetWindowTextLengthW(hwnd)
+            title = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, title, length + 1)
+            if app in title.value.lower():
+                matches.append(int(hwnd))
+        return True
+    user32.EnumWindows(enum_proc(callback), 0)
+    if not matches:
+        return {"ok": False, "error": "No visible window title matched " + app.title() + "."}
+    user32.PostMessageW(matches[0], 0x0010, 0, 0)
+    return {"ok": True, "message": "Sent a close request to one " + app.title() + " window. Unsaved work may require confirmation."}
+
+
 def _press_media_key(virtual_key: int) -> dict[str, Any]:
     """Send a Windows media key without depending on third-party packages."""
     if platform.system() != "Windows":
@@ -314,6 +370,10 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "Arguments must be an object."}
     if name == "open_website":
         return _open_website(arguments)
+    if name == "play_youtube_video":
+        return _play_youtube_video(arguments)
+    if name == "close_named_window":
+        return _close_named_window(arguments)
     allowed = {"open_notepad", "close_active_window", "minimize_active_window",
                "media_play_pause", "media_next_track", "media_previous_track",
                "seek_youtube_to_time"}

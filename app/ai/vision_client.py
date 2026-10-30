@@ -1,7 +1,11 @@
 """Explicit, one-shot image understanding through Groq's hosted vision API."""
+import logging
+
 from groq import AsyncGroq
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 async def ask_about_image(prompt: str, image_data_url: str) -> str:
@@ -35,5 +39,8 @@ async def ask_about_image(prompt: str, image_data_url: str) -> str:
             max_completion_tokens=700,
         )
         return response.choices[0].message.content or "I couldn't read an answer from the vision model."
+    except Exception as exc:
+        logger.exception("Hosted vision request failed (%s)", type(exc).__name__)
+        raise RuntimeError("Vision provider request failed.") from exc
     finally:
         await client.close()

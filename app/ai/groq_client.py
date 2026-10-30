@@ -3,6 +3,7 @@
 import json
 import logging
 import asyncio
+import re
 from typing import Any
 
 from groq import AsyncGroq
@@ -52,6 +53,93 @@ class AIProviderNotConfigured(RuntimeError):
     """Raised when the API key is missing."""
 
 
+def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
+    """Route clear desktop commands locally so the LLM cannot refuse or omit tools."""
+    text = " ".join(message.strip().lower().split())
+    if not text:
+        return None
+
+    # Explicit application/window closing.
+    close_app = re.search(
+        r"\b(?:close|shut|exit|quit)\s+(?:the\s+)?(?:whole\s+)?"
+        r"(brave|chrome|google chrome|spotify|youtube|notepad)(?:\s+(?:browser|window|app|application))?\b",
+        text,
+    )
+    if close_app:
+        app = close_app.group(1)
+        app = "chrome" if app == "google chrome" else app
+        return "close_named_window", {"application": app}
+    if re.search(r"\b(?:close|shut)\s+(?:the\s+)?(?:current\s+)?window\b", text):
+        return "close_active_window", {}
+
+    # Play a named song/video: route directly to the actual watch-page tool.
+    play_match = re.search(
+        r"\b(?:please\s+)?(?:play|put on|start playing)\s+(?:me\s+)?(.+)",
+        text,
+    )
+    if play_match:
+        query = play_match.group(1).strip(" .!?")
+        query = re.sub(r"\s+(?:on|using)\s+(?:youtube|yt)$", "", query).strip()
+        query = re.sub(r"\s+(?:song|music|track)$", "", query).strip() or play_match.group(1).strip(" .!?")
+        if query and query not in {"music", "a song", "some music", "a song please"}:
+            return "play_youtube_video", {"query": query}
+        return "open_website", {"site": "youtube"}
+
+    # Basic current media session controls.
+    if re.search(r"\b(?:pause|resume|unpause|stop)\s+(?:the\s+)?(?:music|song|track|video|playback)\b", text):
+        return "media_play_pause", {}
+    if re.fullmatch(r"(?:play|resume|unpause)(?:\s+the)?(?:\s+music|\s+song|\s+video)?", text):
+        return "media_play_pause", {}
+    if re.search(r"\b(?:next|skip)\s+(?:song|track|music)\b", text):
+        return "media_next_track", {}
+    if re.search(r"\b(?:previous|last)\s+(?:song|track)\b", text):
+        return "media_previous_track", {}
+
+    click_match = re.search(r"\bclick\s+(?:on\s+)?(?:the\s+)?(.+)", text)
+    if click_match:
+        return "click_screen_target", {"target": click_match.group(1).strip(" .!?")[:160]}
+
+    if re.search(r"\b(?:what(?:'s| is) on my screen|inspect my screen|look at my screen)\b", text):
+        return "inspect_screen", {}
+
+    return None
+
+
+async def _save_direct_history(user_message: str, reply: str) -> str:
+    async with _history_lock:
+        _history.extend([
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": reply},
+        ])
+        del _history[:-_MAX_HISTORY_MESSAGES]
+    return reply
+
+
+def _format_direct_result(tool_name: str, result: dict[str, Any]) -> str:
+    """Return honest concise feedback from the actual local action result."""
+    if not result.get("ok"):
+        return "I tried to carry out that desktop action, but it failed: " + str(
+            result.get("error", "the action did not succeed.")
+        )
+    if tool_name == "play_youtube_video":
+        playback = result.get("playback_action") or {}
+        if playback.get("ok"):
+            return (
+                "I found the matching YouTube video and attempted to start playback. "
+                "Please check whether audio is playing; I cannot reliably verify sound output."
+            )
+        return (
+            "I found the matching YouTube video and opened its watch page, but the playback "
+            "control could not be activated automatically: "
+            + str(playback.get("error", "the player did not confirm playback."))
+        )
+    if tool_name in {"close_named_window", "close_active_window"}:
+        if result.get("still_visible_after_request"):
+            return "I sent the close request, but the window is still visible. It may need attention for an unsaved-work prompt."
+        return str(result.get("message", "The close request was sent."))
+    return str(result.get("message", "The desktop action was attempted."))
+
+
 async def clear_history() -> None:
     """Forget the in-memory conversation so the next chat starts clean."""
     async with _history_lock:
@@ -60,6 +148,14 @@ async def clear_history() -> None:
 
 async def ask_homer(user_message: str) -> str:
     """Send a message to Groq with bounded short-term conversation context."""
+    # Clear, explicitly requested computer actions must not depend on the LLM
+    # deciding to call a tool. Run them locally and report the real tool result.
+    direct = _direct_desktop_command(user_message)
+    if direct is not None:
+        tool_name, arguments = direct
+        result = execute_tool(tool_name, arguments)
+        return await _save_direct_history(user_message, _format_direct_result(tool_name, result))
+
     settings = get_settings()
 
     if not settings.groq_api_key or settings.groq_api_key == "replace_me":

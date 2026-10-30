@@ -86,51 +86,73 @@ async def ask_homer(user_message: str) -> str:
             max_completion_tokens=300,
         )
 
-        assistant_message = first_response.choices[0].message
-        tool_calls = assistant_message.tool_calls or []
+        response = first_response
+        tool_steps = 0
+        last_tool_result: dict[str, Any] | None = None
 
-        if not tool_calls:
-            answer = assistant_message.content or "I couldn't generate a text response."
-            async with _history_lock:
-                _history.extend([
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": answer},
-                ])
-                del _history[:-_MAX_HISTORY_MESSAGES]
-            return answer
+        # Permit a short, bounded sequence of tool calls for multi-step requests.
+        # Every action still passes through the strict allowlist in registry.py.
+        while tool_steps < 4:
+            assistant_message = response.choices[0].message
+            tool_calls = assistant_message.tool_calls or []
+            if not tool_calls:
+                final_text = assistant_message.content or (
+                    json.dumps(last_tool_result) if last_tool_result else
+                    "I couldn't generate a text response."
+                )
+                break
 
-        # Execute at most one tool call in this MVP.
-        tool_call = tool_calls[0]
-        tool_name = tool_call.function.name
+            messages.append(assistant_message.model_dump(exclude_none=True))
+            for tool_call in tool_calls[:4 - tool_steps]:
+                tool_name = tool_call.function.name
+                try:
+                    arguments = json.loads(tool_call.function.arguments or "{}")
+                    if not isinstance(arguments, dict):
+                        arguments = {"_invalid_arguments": arguments}
+                except json.JSONDecodeError:
+                    arguments = {"_invalid_arguments": "Malformed JSON"}
 
-        try:
-            arguments = json.loads(tool_call.function.arguments or "{}")
-            if not isinstance(arguments, dict):
-                arguments = {"_invalid_arguments": arguments}
-        except json.JSONDecodeError:
-            arguments = {"_invalid_arguments": "Malformed JSON"}
+                tool_result = execute_tool(tool_name, arguments)
+                last_tool_result = tool_result
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(tool_result),
+                })
+                tool_steps += 1
 
-        tool_result = execute_tool(tool_name, arguments)
+            if tool_steps >= 4:
+                break
 
-        messages.append(assistant_message.model_dump(exclude_none=True))
-        messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": json.dumps(tool_result),
-            }
-        )
+            response = await client.chat.completions.create(
+                model=settings.groq_model,
+                messages=messages,
+                tools=TOOL_DEFINITIONS,
+                tool_choice="auto",
+                temperature=0.2,
+                max_completion_tokens=400,
+            )
+        else:
+            final_text = (
+                "I completed the allowed actions for this request. "
+                "Ask me to continue if there are more steps."
+            )
 
-        final_response = await client.chat.completions.create(
-            model=settings.groq_model,
-            messages=messages,
-            tools=TOOL_DEFINITIONS,
-            tool_choice="none",
-            temperature=0.2,
-            max_completion_tokens=500,
-        )
-
-        final_text = final_response.choices[0].message.content or json.dumps(tool_result)
+        if tool_steps >= 4 and (response.choices[0].message.tool_calls or []):
+            final_text = (
+                "I reached the four-action safety limit for one request. "
+                "Tell me to continue if you want the next steps."
+            )
+        elif tool_steps and 'final_text' not in locals():
+            final_response = await client.chat.completions.create(
+                model=settings.groq_model,
+                messages=messages,
+                tools=TOOL_DEFINITIONS,
+                tool_choice="none",
+                temperature=0.2,
+                max_completion_tokens=400,
+            )
+            final_text = final_response.choices[0].message.content or json.dumps(last_tool_result)
         async with _history_lock:
             _history.extend([
                 {"role": "user", "content": user_message},

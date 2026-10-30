@@ -43,3 +43,15 @@ that differ from the software package itself.
 This branch adds optional helper modules and docs. It does not yet provide a
 desktop GUI, microphone recording endpoint, TTS, continuous webcam loop, or
 automatic gesture-to-action mapping.
+
+
+## Desktop UI automation research (reviewed, not vendored)
+
+- **screen-use** — https://github.com/tongriyaotxt/screen-use
+  - MIT-licensed Windows desktop automation with UI Automation tree matching, screenshot grounding, mouse/keyboard actions, and an observe-act-verify task loop. This is the closest architectural match for HOMER's goal of finding a visible Play button and clicking it. It can operate without a vision model for many accessible controls.
+- **WindowsAgent** — https://github.com/ibraheem-mustafa-dev/windowsagent
+  - MIT-licensed Windows UI Automation-first agent with a vision fallback. Useful for targeting named controls more reliably than guessed screen coordinates.
+- **pywinauto** — https://github.com/pywinauto/pywinauto
+  - BSD-3-Clause Python library for Windows UI Automation and native window/control access. A lighter building block for application-specific automation.
+
+These projects were researched as implementation references. Their code is not copied into HOMER by this commit. A robust screen agent should prefer UI Automation/accessibility names, use visual coordinate grounding only when needed, and verify the screen after every action. Full-screen access is powerful, so the user should remain able to approve sensitive actions and stop automation immediately.

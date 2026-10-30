@@ -271,6 +271,7 @@ class VoiceTask(QObject):
     error = Signal(str)
     finished = Signal()
     mode_command = Signal(str)
+    screen_request = Signal(str)
 
     def __init__(self, mode: str, text: str = "", speak_reply: bool = True):
         super().__init__()
@@ -630,6 +631,7 @@ class VoiceAssistantWindow(QMainWindow):
         self.thread.started.connect(self.worker.run)
         self.worker.state.connect(self._set_state)
         self.worker.mode_command.connect(self._on_mode_command)
+        self.worker.screen_request.connect(self.screen_request.emit)
         self.worker.transcript.connect(self._show_transcript)
         self.worker.reply.connect(self._show_reply)
         self.worker.error.connect(self._show_error)

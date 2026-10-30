@@ -226,37 +226,43 @@ def click_screen_target(target: str) -> dict[str, Any]:
 
 
 def close_window(application: str) -> dict[str, Any]:
-    """Close one matching top-level window using Windows UI Automation."""
+    """Close one visible window, identifying browsers by process rather than tab title."""
     error = _require_windows()
     if error:
         return error
     app = (application or "").strip().casefold()
-    aliases = {
-        "brave": ("brave", "brave.exe"),
-        "chrome": ("chrome", "chrome.exe"),
-        "spotify": ("spotify", "spotify.exe"),
-        "youtube": ("youtube",),
-        "notepad": ("notepad", "notepad.exe"),
+    process_names = {
+        "brave": {"brave.exe"},
+        "chrome": {"chrome.exe"},
+        "spotify": {"spotify.exe"},
+        "notepad": {"notepad.exe"},
     }
-    if app not in aliases:
+    title_aliases = {"youtube": ("youtube",), "spotify": ("spotify",), "notepad": ("notepad",)}
+    if app not in {*process_names, *title_aliases}:
         return {"ok": False, "error": "Unsupported application name."}
     try:
+        import psutil
         windows = _visible_windows()
         matches = []
         for window in windows:
             title = _window_title(window).casefold()
-            process = ""
+            process_match = False
             try:
-                process = str(window.process_id())
+                process_name = psutil.Process(window.process_id()).name().casefold()
+                process_match = process_name in process_names.get(app, set())
             except Exception:
                 pass
-            # Brave/Chrome are identified by window title and accessible UIA title;
-            # avoid killing the process, which could close unrelated windows.
-            if any(alias in title for alias in aliases[app]):
+            title_match = any(alias in title for alias in title_aliases.get(app, ()))
+            if process_match or (app not in process_names and title_match):
                 matches.append(window)
         if not matches:
             return {"ok": False, "error": "No visible " + app.title() + " window was found."}
-        target = matches[0]
+        # Prefer the active window when it is among matches; otherwise close the first match only.
+        try:
+            active = _desktop().get_active()
+            target = active if any(_window_title(active) == _window_title(w) for w in matches) else matches[0]
+        except Exception:
+            target = matches[0]
         title = _window_title(target)
         try:
             target.close()
@@ -264,12 +270,17 @@ def close_window(application: str) -> dict[str, Any]:
             target.set_focus()
             import pyautogui
             pyautogui.hotkey("alt", "f4")
-        time.sleep(0.35)
+        time.sleep(0.5)
         still_visible = any(_window_title(w) == title for w in _visible_windows())
-        return {"ok": True, "message": "Sent a close request to one " + app.title() + " window.",
-                "window_title": title, "close_requested": True,
-                "still_visible_after_request": still_visible,
-                "note": "The app may ask about unsaved work." if still_visible else "Window no longer appears in the visible-window list."}
+        return {
+            "ok": not still_visible,
+            "message": ("Closed the requested window." if not still_visible else "Sent a close request, but the window is still visible."),
+            "application": app,
+            "window_title": title,
+            "close_requested": True,
+            "still_visible_after_request": still_visible,
+            "note": "The app may ask about unsaved work." if still_visible else "The window no longer appears in the visible-window list."
+        }
     except ImportError as exc:
         return {"ok": False, "error": "Missing desktop automation dependency (" + str(exc.name) + ")."}
     except Exception as exc:

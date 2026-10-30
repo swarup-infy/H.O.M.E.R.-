@@ -253,9 +253,16 @@ class VoiceTask(QObject):
             "switch to gesture mode", "open gesture mode", "go to gesture mode",
             "gesture mode", "enable gesture controls", "open gesture controls",
         }
-        if phrase in text_commands:
+        if phrase in text_commands or (
+            "text mode" in phrase
+            or "text assistant" in phrase
+            or "typing mode" in phrase
+        ):
             return "text"
-        if phrase in gesture_commands:
+        if phrase in gesture_commands or (
+            "gesture mode" in phrase
+            or "gesture controls" in phrase
+        ):
             return "gesture"
         return None
 

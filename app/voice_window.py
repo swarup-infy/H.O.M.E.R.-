@@ -5,12 +5,11 @@ from __future__ import annotations
 import math
 import os
 import sys
-import time
 from pathlib import Path
 
 import httpx
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot, Qt, QRectF
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -246,6 +245,7 @@ class VoiceAssistantWindow(QMainWindow):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+        self.setWindowFlag(Qt.WindowType.Window, True)
         self.thread: QThread | None = None
         self.worker: VoiceTask | None = None
         self.setWindowTitle("HOMER | Voice Interface")

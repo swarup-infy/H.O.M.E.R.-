@@ -259,10 +259,11 @@ class VoiceTask(QObject):
         response.raise_for_status()
         return str(response.json().get("reply", "")).strip() or "I received an empty response."
 
-    def _speak(self, answer: str, listen_for_stop: bool = False) -> None:
-        """Speak a reply and optionally listen for the spoken interruption keyword."""
+    def _speak(self, answer: str, listen_for_stop: bool = False) -> str | None:
+        """Speak a reply while listening for stop and response-length commands."""
         self.state.emit("SPEAKING")
         monitor_stop = threading.Event()
+        interruption = {"command": None}
         monitor_thread = None
 
         if listen_for_stop:
@@ -290,9 +291,23 @@ class VoiceTask(QObject):
                                 ).strip().lower()
                             except (sr.UnknownValueError, sr.RequestError):
                                 continue
-                            words = phrase.replace("-", " ").split()
-                            if "stop" in words or phrase in {"homer stop", "stop speaking"}:
-                                self.transcript.emit("Stop command detected.")
+                            normalized = " ".join(phrase.replace("-", " ").split())
+                            words = set(normalized.split())
+                            command = None
+                            if "stop" in words or normalized in {"homer stop", "stop speaking", "be quiet"}:
+                                command = "stop"
+                            elif "short" in words and ("answer" in words or "response" in words):
+                                command = "short"
+                            elif "summarize" in words or "summary" in words or "give me a summary" in normalized:
+                                command = "summary"
+                            elif ("in detail" in normalized or "detailed answer" in normalized
+                                  or "long answer" in normalized or "explain more" in normalized):
+                                command = "detail"
+                            if command:
+                                interruption["command"] = command
+                                labels = {"stop": "Stop command detected.", "short": "Switching to a short answer.",
+                                          "summary": "Preparing a summary.", "detail": "Preparing a detailed answer."}
+                                self.transcript.emit(labels[command])
                                 from app.voice.speaker import stop_speaking
                                 stop_speaking()
                                 break
@@ -321,6 +336,7 @@ class VoiceTask(QObject):
             monitor_stop.set()
             if monitor_thread is not None:
                 monitor_thread.join(timeout=1.0)
+        return interruption["command"]
 
     @Slot()
     def run(self) -> None:
@@ -436,7 +452,19 @@ class VoiceTask(QObject):
                     return
                 answer = self._ask(message)
                 self.reply.emit(answer)
-                self._speak(answer, listen_for_stop=True)
+                interruption = self._speak(answer, listen_for_stop=True)
+                # Spoken control commands can interrupt the current reply and request
+                # a different length without making the user repeat the original question.
+                while interruption in {"short", "summary", "detail"} and not self._stop_event.is_set():
+                    instruction = {
+                        "short": "Answer my previous question in 1–3 short sentences. Be direct.",
+                        "summary": "Summarize your previous answer in a few concise sentences, keeping only the key points.",
+                        "detail": "Now give me a more detailed explanation of my previous question, with useful examples and clear steps where appropriate.",
+                    }[interruption]
+                    self.state.emit("THINKING")
+                    answer = self._ask(f"{instruction} My original question was: {message}")
+                    self.reply.emit(answer)
+                    interruption = self._speak(answer, listen_for_stop=True)
                 if not self._stop_event.is_set():
                     self.state.emit("LISTENING")
         finally:

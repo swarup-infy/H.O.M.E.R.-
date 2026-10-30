@@ -266,6 +266,12 @@ class VoiceTask(QObject):
         interruption = {"command": None}
         monitor_thread = None
 
+        # Reset cancellation BEFORE the microphone monitor starts. Previously
+        # speak() cleared this flag after the monitor started, which could erase
+        # a fast "stop" command before the TTS worker saw it.
+        from app.voice.speaker import reset_stop_request
+        reset_stop_request()
+
         if listen_for_stop:
             def monitor_for_stop() -> None:
                 try:

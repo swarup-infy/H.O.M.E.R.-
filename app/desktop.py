@@ -5,7 +5,7 @@ import html
 
 import httpx
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
+from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -437,9 +437,35 @@ class HomerWindow(QMainWindow):
         if self.voice_window is None:
             self.voice_window = VoiceAssistantWindow(self)
 
+        self.voice_window.mode_switch.connect(self.handle_voice_mode_switch)
         self.voice_window.showMaximized()
         self.voice_window.raise_()
         self.voice_window.activateWindow()
+
+    def handle_voice_mode_switch(self, mode: str):
+        """Route explicit voice commands to the requested desktop mode."""
+        if mode == "text":
+            if self.voice_window is not None:
+                self.voice_window.hide()
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+            self.set_status("Text mode activated. Type a message to HOMER.")
+        elif mode == "gesture":
+            if self.voice_window is not None:
+                self.voice_window.hide()
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+            self.set_status(
+                "Gesture mode requested. Camera-based gesture controls "
+                "are not implemented yet."
+            )
+            self.add_message(
+                "HOMER",
+                "Gesture mode is not available yet. The voice command was "
+                "recognized, but camera gesture controls still need to be built."
+            )
 
     def add_message(self, speaker: str, message: str):
         bubble = MessageBubble(speaker, message)
@@ -592,7 +618,9 @@ def main():
     app.setFont(QFont("Segoe UI", 10))
 
     window = HomerWindow()
-    window.show()
+    # Start directly in the animated voice interface on app launch.
+    window.showMinimized()
+    QTimer.singleShot(150, window.open_voice_assistant)
 
     sys.exit(app.exec())
 

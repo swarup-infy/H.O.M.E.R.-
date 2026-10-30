@@ -259,20 +259,68 @@ class VoiceTask(QObject):
         response.raise_for_status()
         return str(response.json().get("reply", "")).strip() or "I received an empty response."
 
-    def _speak(self, answer: str) -> None:
-        """Always speak answers in voice mode without killing the listen loop on TTS errors."""
+    def _speak(self, answer: str, listen_for_stop: bool = False) -> None:
+        """Speak a reply and optionally listen for the spoken interruption keyword."""
         self.state.emit("SPEAKING")
+        monitor_stop = threading.Event()
+        monitor_thread = None
+
+        if listen_for_stop:
+            def monitor_for_stop() -> None:
+                try:
+                    import speech_recognition as sr
+                    stop_recognizer = sr.Recognizer()
+                    stop_recognizer.dynamic_energy_threshold = True
+                    stop_recognizer.pause_threshold = 0.35
+                    # Open the microphone separately while the speech engine is playing.
+                    with sr.Microphone() as stop_source:
+                        stop_recognizer.adjust_for_ambient_noise(stop_source, duration=0.2)
+                        while not monitor_stop.is_set() and not self._stop_event.is_set():
+                            try:
+                                clip = stop_recognizer.listen(
+                                    stop_source, timeout=0.35, phrase_time_limit=2
+                                )
+                            except sr.WaitTimeoutError:
+                                continue
+                            if monitor_stop.is_set() or self._stop_event.is_set():
+                                break
+                            try:
+                                phrase = stop_recognizer.recognize_google(
+                                    clip, language="en-IN"
+                                ).strip().lower()
+                            except (sr.UnknownValueError, sr.RequestError):
+                                continue
+                            words = phrase.replace("-", " ").split()
+                            if "stop" in words or phrase in {"homer stop", "stop speaking"}:
+                                self.transcript.emit("Stop command detected.")
+                                from app.voice.speaker import stop_speaking
+                                stop_speaking()
+                                break
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "HOMER's stop-word listener could not access the microphone."
+                    )
+
+            monitor_thread = threading.Thread(
+                target=monitor_for_stop, name="HOMER-Stop-Listener", daemon=True
+            )
+            monitor_thread.start()
+
         try:
             from app.voice.speaker import speak
             speak(answer)
-        except Exception as exc:
-            # Preserve continuous listening even if Windows TTS temporarily fails.
+        except Exception:
             import logging
             logging.getLogger(__name__).exception("HOMER could not speak this reply")
             self.error.emit(
                 "I received the answer, but voice playback failed. "
                 "Check Windows text-to-speech voices and the server terminal."
             )
+        finally:
+            monitor_stop.set()
+            if monitor_thread is not None:
+                monitor_thread.join(timeout=1.0)
 
     @Slot()
     def run(self) -> None:
@@ -359,36 +407,38 @@ class VoiceTask(QObject):
         sr, recognizer = self._recognizer()
         self.state.emit("LISTENING")
         try:
-            with sr.Microphone() as source:
-                recognizer.adjust_for_ambient_noise(source, duration=0.6)
-                while not self._stop_event.is_set():
-                    try:
+            while not self._stop_event.is_set():
+                # Close the command-listening microphone before opening the stop-word
+                # listener during playback; this avoids competing microphone streams.
+                try:
+                    with sr.Microphone() as source:
+                        recognizer.adjust_for_ambient_noise(source, duration=0.25)
                         audio = recognizer.listen(source, timeout=1, phrase_time_limit=12)
-                    except sr.WaitTimeoutError:
-                        continue
-                    if self._stop_event.is_set():
-                        break
-                    self.state.emit("THINKING")
-                    try:
-                        message = recognizer.recognize_google(audio, language="en-IN").strip()
-                    except sr.UnknownValueError:
-                        self.state.emit("LISTENING")
-                        continue
-                    except sr.RequestError as exc:
-                        raise RuntimeError("Speech recognition service is unavailable. Check your internet connection.") from exc
-                    if not message:
-                        self.state.emit("LISTENING")
-                        continue
-                    self.transcript.emit(message)
-                    command = self._parse_mode_command(message)
-                    if command:
-                        self.mode_command.emit(command)
-                        return
-                    answer = self._ask(message)
-                    self.reply.emit(answer)
-                    self._speak(answer)
-                    if not self._stop_event.is_set():
-                        self.state.emit("LISTENING")
+                except sr.WaitTimeoutError:
+                    continue
+                if self._stop_event.is_set():
+                    break
+                self.state.emit("THINKING")
+                try:
+                    message = recognizer.recognize_google(audio, language="en-IN").strip()
+                except sr.UnknownValueError:
+                    self.state.emit("LISTENING")
+                    continue
+                except sr.RequestError as exc:
+                    raise RuntimeError("Speech recognition service is unavailable. Check your internet connection.") from exc
+                if not message:
+                    self.state.emit("LISTENING")
+                    continue
+                self.transcript.emit(message)
+                command = self._parse_mode_command(message)
+                if command:
+                    self.mode_command.emit(command)
+                    return
+                answer = self._ask(message)
+                self.reply.emit(answer)
+                self._speak(answer, listen_for_stop=True)
+                if not self._stop_event.is_set():
+                    self.state.emit("LISTENING")
         finally:
             self.state.emit("READY")
 

@@ -139,6 +139,7 @@ class HomerWindow(QMainWindow):
 
         self.thread = None
         self.worker = None
+        self.voice_window = None
 
         self.setWindowTitle("HOMER | Desktop AI Assistant")
         self.resize(1100, 760)
@@ -320,14 +321,9 @@ class HomerWindow(QMainWindow):
         future_button = QPushButton("◉  Voice assistant")
         future_button.setObjectName("secondaryButton")
         future_button.setToolTip(
-            "Voice integration will be added in a later step."
+            "Open the animated HOMER voice assistant."
         )
-
-        future_button.clicked.connect(
-            lambda: self.set_status(
-                "Voice controls are not implemented yet."
-            )
-        )
+        future_button.clicked.connect(self.open_voice_assistant)
 
         vision_button = QPushButton("◇  Gesture controls")
         vision_button.setObjectName("secondaryButton")
@@ -433,6 +429,17 @@ class HomerWindow(QMainWindow):
 
         root.addWidget(sidebar)
         root.addWidget(main_panel, 1)
+
+    def open_voice_assistant(self):
+        """Open the dedicated animated voice-assistant window."""
+        from app.voice_window import VoiceAssistantWindow
+
+        if self.voice_window is None:
+            self.voice_window = VoiceAssistantWindow(self)
+
+        self.voice_window.showMaximized()
+        self.voice_window.raise_()
+        self.voice_window.activateWindow()
 
     def add_message(self, speaker: str, message: str):
         bubble = MessageBubble(speaker, message)

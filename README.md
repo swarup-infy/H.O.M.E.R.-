@@ -35,6 +35,15 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 Open `http://127.0.0.1:8000/docs`. Use `GET /health` or send
 `POST /chat` with JSON: `{"message":"Say hello"}`.
 
+### Screen awareness (one screenshot at a time)
+
+Click **Ask about screen**, confirm the privacy prompt, then enter a question.
+HOMER captures a single screenshot, downsizes it, and sends it to the configured
+Groq vision model. The screenshot is not saved to disk by this feature. Do not
+share screens containing passwords, private messages, financial data, or other
+sensitive information. Set `GROQ_VISION_MODEL` in `.env` to a vision-capable
+model available to your Groq account (default: `qwen/qwen3.8-27b`).
+
 ### Optional voice input
 
 ```powershell

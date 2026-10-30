@@ -260,10 +260,19 @@ class VoiceTask(QObject):
         return str(response.json().get("reply", "")).strip() or "I received an empty response."
 
     def _speak(self, answer: str) -> None:
-        if self.speak_reply:
-            self.state.emit("SPEAKING")
+        """Always speak answers in voice mode without killing the listen loop on TTS errors."""
+        self.state.emit("SPEAKING")
+        try:
             from app.voice.speaker import speak
             speak(answer)
+        except Exception as exc:
+            # Preserve continuous listening even if Windows TTS temporarily fails.
+            import logging
+            logging.getLogger(__name__).exception("HOMER could not speak this reply")
+            self.error.emit(
+                "I received the answer, but voice playback failed. "
+                "Check Windows text-to-speech voices and the server terminal."
+            )
 
     @Slot()
     def run(self) -> None:

@@ -41,7 +41,12 @@ class AnimatedHomerCore(QWidget):
         self.timer.setInterval(25)
         self.timer.timeout.connect(self._tick)
         self.timer.start()
-        self.logo = QPixmap(str(Path(__file__).parent / "assets" / "homer_core.png"))
+        asset_dir = Path(__file__).parent / "assets"
+        # Prefer the newer artwork; fall back to the original filename.
+        logo_path = asset_dir / "Homer 4.png"
+        if not logo_path.is_file():
+            logo_path = asset_dir / "homer_core.png"
+        self.logo = QPixmap(str(logo_path))
 
     def set_mode(self, mode: str) -> None:
         self.mode = mode.upper()

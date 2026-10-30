@@ -10,6 +10,7 @@ import logging
 import queue
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 
 import pyttsx3
@@ -90,9 +91,18 @@ def _speech_worker() -> None:
                 engine = _make_engine()
                 with _active_engine_lock:
                     _active_engine = engine
-                _stop_requested.clear()
                 engine.say(request.text)
-                engine.runAndWait()
+                # Pump SAPI events on the same thread that owns the engine. Calling
+                # engine.stop() from the microphone thread is unsafe/unreliable on Windows.
+                engine.startLoop(False)
+                try:
+                    while engine.isBusy():
+                        if _stop_requested.is_set():
+                            engine.stop()
+                        engine.iterate()
+                        time.sleep(0.01)
+                finally:
+                    engine.endLoop()
             except BaseException as exc:
                 request.errors.append(exc)
                 logger.exception("HOMER could not play a speech response.")
@@ -148,6 +158,9 @@ def speak(text: str) -> None:
         logger.warning("HOMER received an empty response for speech.")
         return
     _ensure_worker()
+    # Clear cancellation before queuing this reply, never inside the worker after
+    # the microphone listener may already have received a stop command.
+    _stop_requested.clear()
     request = _SpeechRequest(text=text)
     _speech_queue.put(request)
     if not request.done.wait(timeout=SPEECH_TIMEOUT_SECONDS):

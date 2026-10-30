@@ -34,6 +34,9 @@ _start_lock = threading.Lock()
 _speech_thread: threading.Thread | None = None
 _ready = threading.Event()
 _start_error: BaseException | None = None
+_active_engine = None
+_active_engine_lock = threading.Lock()
+_stop_requested = threading.Event()
 
 
 def prepare_text(text: str) -> str:
@@ -75,7 +78,7 @@ def _make_engine():
 
 def _speech_worker() -> None:
     """Process speech requests serially; isolate each reply in a fresh engine."""
-    global _start_error
+    global _start_error, _active_engine
     _ready.set()
     while True:
         request = _speech_queue.get()
@@ -85,6 +88,9 @@ def _speech_worker() -> None:
             engine = None
             try:
                 engine = _make_engine()
+                with _active_engine_lock:
+                    _active_engine = engine
+                _stop_requested.clear()
                 engine.say(request.text)
                 engine.runAndWait()
             except BaseException as exc:
@@ -96,6 +102,9 @@ def _speech_worker() -> None:
                         engine.stop()
                     except Exception:
                         logger.debug("Ignoring an error while stopping SAPI.", exc_info=True)
+                with _active_engine_lock:
+                    if _active_engine is engine:
+                        _active_engine = None
         finally:
             if request is not None:
                 request.done.set()
@@ -118,6 +127,18 @@ def _ensure_worker() -> None:
         raise RuntimeError("HOMER's speech engine did not start within 10 seconds.")
     if _start_error is not None:
         raise RuntimeError(f"Could not start Windows text-to-speech: {_start_error}") from _start_error
+
+
+def stop_speaking() -> None:
+    """Immediately request cancellation of the currently spoken response."""
+    _stop_requested.set()
+    with _active_engine_lock:
+        engine = _active_engine
+    if engine is not None:
+        try:
+            engine.stop()
+        except Exception:
+            logger.exception("HOMER could not interrupt the current speech.")
 
 
 def speak(text: str) -> None:

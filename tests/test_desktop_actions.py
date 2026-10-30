@@ -91,4 +91,4 @@ def test_play_youtube_video_attempts_player_interaction():
     assert result["url"] == "https://www.youtube.com/watch?v=test-video-id&autoplay=1"
     assert result["playback_attempted"] is True
     assert result["playback_action"] == playback
-    click.assert_called_once_with("Play button on the YouTube video player")
+    click.assert_called_once_with("Play")

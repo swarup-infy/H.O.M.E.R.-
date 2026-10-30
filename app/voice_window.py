@@ -54,7 +54,7 @@ class AnimatedHomerCore(QWidget):
 
     @Slot()
     def _tick(self) -> None:
-        self.phase = (self.phase + 1.25) % 360
+        self.phase = (self.phase + (2.8 if self.mode == "SPEAKING" else 1.25)) % 360
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -121,6 +121,49 @@ class AnimatedHomerCore(QWidget):
                 painter.drawEllipse(QRectF(end_x - 2, y + direction * 11, 4, 4))
                 painter.setPen(trace_pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        # Electric arcs overlap the core while HOMER is speaking.
+        if self.mode in ("SPEAKING", "LISTENING"):
+            intensity = 1.0 if self.mode == "SPEAKING" else 0.4
+            for arc_index in range(9 if intensity == 1.0 else 4):
+                angle = self.phase * (1.4 + arc_index * 0.13) + arc_index * 47
+                arc_radius = radius * (0.43 + (arc_index % 4) * 0.14)
+                painter.save()
+                painter.translate(cx, cy)
+                painter.rotate(angle)
+                path = QPainterPath()
+                path.moveTo(arc_radius * 0.5, 0)
+                for step in range(1, 8):
+                    distance = arc_radius * (0.5 + step * 0.075)
+                    jitter = math.sin(math.radians(self.phase * 5 + arc_index * 67 + step * 53)) * radius * 0.08
+                    path.lineTo(distance, jitter)
+                painter.setPen(QPen(QColor(90, 238, 255, int(220 * intensity)), 1.2 + intensity))
+                painter.drawPath(path)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(180, 250, 255, int(230 * intensity)))
+                painter.drawEllipse(QRectF(arc_radius * 1.06 - 2, -2, 4, 4))
+                painter.restore()
+
+            if self.mode == "SPEAKING":
+                # Short, branching lightning bolts flash across the logo itself.
+                for bolt in range(12):
+                    angle = math.radians(bolt * 30 + self.phase * 2.8)
+                    inner = radius * (0.12 + 0.08 * (bolt % 3))
+                    outer = radius * (0.48 + 0.14 * (bolt % 2))
+                    x1, y1 = cx + math.cos(angle) * inner, cy + math.sin(angle) * inner
+                    x2, y2 = cx + math.cos(angle) * outer, cy + math.sin(angle) * outer
+                    bolt_path = QPainterPath()
+                    bolt_path.moveTo(x1, y1)
+                    for segment in range(1, 5):
+                        t = segment / 5
+                        bx = x1 + (x2 - x1) * t + math.sin(math.radians(self.phase * 7 + bolt * 31 + segment * 83)) * radius * 0.07
+                        by = y1 + (y2 - y1) * t + math.cos(math.radians(self.phase * 6 + bolt * 43 + segment * 61)) * radius * 0.07
+                        bolt_path.lineTo(bx, by)
+                    bolt_path.lineTo(x2, y2)
+                    painter.setPen(QPen(QColor(0, 130, 255, 105), 5))
+                    painter.drawPath(bolt_path)
+                    painter.setPen(QPen(QColor(145, 250, 255, 235), 1.5))
+                    painter.drawPath(bolt_path)
 
         # Logo is kept crisp and contained inside the innermost ring.
         logo_size = radius * 1.42

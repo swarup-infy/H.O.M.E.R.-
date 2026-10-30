@@ -139,16 +139,14 @@ def _ensure_worker() -> None:
         raise RuntimeError(f"Could not start Windows text-to-speech: {_start_error}") from _start_error
 
 
+def reset_stop_request() -> None:
+    """Prepare a new reply before its interruption listener starts."""
+    _stop_requested.clear()
+
+
 def stop_speaking() -> None:
-    """Immediately request cancellation of the currently spoken response."""
+    """Request cancellation; the speech-owning thread stops SAPI safely."""
     _stop_requested.set()
-    with _active_engine_lock:
-        engine = _active_engine
-    if engine is not None:
-        try:
-            engine.stop()
-        except Exception:
-            logger.exception("HOMER could not interrupt the current speech.")
 
 
 def speak(text: str) -> None:
@@ -158,9 +156,6 @@ def speak(text: str) -> None:
         logger.warning("HOMER received an empty response for speech.")
         return
     _ensure_worker()
-    # Clear cancellation before queuing this reply, never inside the worker after
-    # the microphone listener may already have received a stop command.
-    _stop_requested.clear()
     request = _SpeechRequest(text=text)
     _speech_queue.put(request)
     if not request.done.wait(timeout=SPEECH_TIMEOUT_SECONDS):

@@ -62,12 +62,12 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
     # Explicit application/window closing.
     close_app = re.search(
         r"\b(?:close|shut|exit|quit)\s+(?:the\s+)?(?:whole\s+)?"
-        r"(brave|chrome|google chrome|spotify|youtube|notepad)(?:\s+(?:browser|window|app|application))?\b",
+        r"(brave|chrome|google chrome|edge|microsoft edge|firefox|spotify|youtube|notepad)(?:\s+(?:browser|window|app|application))?\b",
         text,
     )
     if close_app:
         app = close_app.group(1)
-        app = "chrome" if app == "google chrome" else app
+        app = {"google chrome": "chrome", "microsoft edge": "edge"}.get(app, app)
         return "close_named_window", {"application": app}
     if re.search(r"\b(?:close|shut)\s+(?:the\s+)?(?:(?:current|whole|entire)\s+)?window\b", text):
         return "close_active_window", {}

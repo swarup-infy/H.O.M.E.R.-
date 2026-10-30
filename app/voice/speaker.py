@@ -1,11 +1,16 @@
-"""Reliable local text-to-speech for HOMER on Windows.
+"""Thread-safe Windows text-to-speech for HOMER.
 
-The engine is reused between replies so repeated questions do not silently
-lose speech after the first response.
+A single dedicated thread owns the pyttsx3/SAPI engine for its entire lifetime.
+Voice recognition and network calls run in Qt worker threads, so using a
+persistent SAPI engine from those changing threads can make later replies silent.
 """
+from __future__ import annotations
+
 import logging
+import queue
 import re
 import threading
+from typing import Optional
 
 import pyttsx3
 
@@ -15,12 +20,15 @@ VOICE_NAME = "Microsoft David Desktop"
 SPEECH_RATE = 165
 VOLUME = 1.0
 
-_speech_lock = threading.RLock()
-_engine = None
+_speech_queue: queue.Queue[Optional[str]] = queue.Queue()
+_start_lock = threading.Lock()
+_speech_thread: threading.Thread | None = None
+_ready = threading.Event()
+_start_error: BaseException | None = None
 
 
 def prepare_text(text: str) -> str:
-    """Convert Markdown-heavy answers into readable spoken text."""
+    """Remove markdown syntax and code blocks before reading the answer aloud."""
     text = re.sub(r"```[\s\S]*?```", " ", text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
@@ -36,17 +44,17 @@ def prepare_text(text: str) -> str:
     return text.strip()
 
 
-def _create_engine():
-    """Initialize and configure a fresh SAPI engine."""
+def _make_engine():
+    """Create SAPI on the dedicated TTS thread."""
     engine = pyttsx3.init("sapi5")
     voices = engine.getProperty("voices") or []
     selected = next(
-        (voice for voice in voices if VOICE_NAME.casefold() in voice.name.casefold()),
+        (v for v in voices if VOICE_NAME.casefold() in v.name.casefold()),
         None,
     )
     if selected is None:
         selected = next(
-            (voice for voice in voices if "english" in voice.name.casefold()),
+            (v for v in voices if "english" in v.name.casefold()),
             None,
         )
     if selected is not None:
@@ -56,38 +64,83 @@ def _create_engine():
     return engine
 
 
+def _speech_worker() -> None:
+    """Own and operate the speech engine on one stable thread."""
+    global _start_error
+    engine = None
+    try:
+        engine = _make_engine()
+        _ready.set()
+        while True:
+            text = _speech_queue.get()
+            try:
+                if text is None:
+                    return
+                engine.say(text)
+                engine.runAndWait()
+            except Exception:
+                logger.exception("HOMER speech playback failed; rebuilding the SAPI engine.")
+                try:
+                    engine.stop()
+                except Exception:
+                    pass
+                try:
+                    engine = _make_engine()
+                    engine.say(text)
+                    engine.runAndWait()
+                except Exception:
+                    logger.exception("HOMER could not recover its speech engine.")
+                    # Rebuild before processing the next response.
+                    try:
+                        engine = _make_engine()
+                    except Exception:
+                        logger.exception("Could not reinitialize Windows SAPI.")
+                        engine = None
+            finally:
+                _speech_queue.task_done()
+    except BaseException as exc:
+        _start_error = exc
+        logger.exception("HOMER text-to-speech engine failed to start.")
+        _ready.set()
+    finally:
+        if engine is not None:
+            try:
+                engine.stop()
+            except Exception:
+                pass
+
+
+def _ensure_worker() -> None:
+    global _speech_thread
+    with _start_lock:
+        if _speech_thread is None or not _speech_thread.is_alive():
+            _ready.clear()
+            _speech_thread = threading.Thread(
+                target=_speech_worker,
+                name="HOMER-TTS",
+                daemon=True,
+            )
+            _speech_thread.start()
+    if not _ready.wait(timeout=10):
+        raise RuntimeError("HOMER's speech engine did not start within 10 seconds.")
+    if _start_error is not None:
+        raise RuntimeError(f"Could not start Windows text-to-speech: {_start_error}") from _start_error
+
+
 def speak(text: str) -> None:
-    """Speak every non-empty HOMER response; log failures instead of crashing voice mode."""
-    global _engine
+    """Queue every HOMER reply for sequential playback; wait until it has finished."""
     text = prepare_text(text)
     if not text:
         logger.warning("HOMER received an empty response for speech.")
         return
-
-    with _speech_lock:
-        try:
-            if _engine is None:
-                _engine = _create_engine()
-            # Queue the entire answer and run the event loop for each response.
-            _engine.stop()
-            _engine.say(text)
-            _engine.runAndWait()
-        except Exception:
-            logger.exception("HOMER text-to-speech failed; retrying with a fresh engine.")
-            try:
-                if _engine is not None:
-                    try:
-                        _engine.stop()
-                    except Exception:
-                        pass
-                _engine = _create_engine()
-                _engine.say(text)
-                _engine.runAndWait()
-            except Exception:
-                logger.exception("HOMER text-to-speech retry failed.")
-                _engine = None
-                raise
+    _ensure_worker()
+    # Queue.join() ensures the UI doesn't mark the assistant as listening
+    # while the current answer is still speaking.
+    _speech_queue.put(text)
+    _speech_queue.join()
 
 
 if __name__ == "__main__":
-    speak("Hello! I am HOMER. I will speak every response aloud.")
+    speak("Hello! I am HOMER. This is the first response.")
+    speak("This is the second response, and I should speak again.")
+    speak("This is the third response, and I should still be speaking.")

@@ -206,6 +206,46 @@ def _browser_executable(browser: str) -> str | None:
     return next((str(path) for path in candidates if path.is_file()), None)
 
 
+
+def _navigate_existing_browser(url: str, browser: str = "default") -> bool:
+    """Navigate the current tab of an already-open browser instead of launching another window."""
+    if platform.system() != "Windows":
+        return False
+    try:
+        from pywinauto import Desktop
+        import pyautogui
+        import psutil
+
+        allowed = {"chrome": {"chrome.exe"}, "brave": {"brave.exe"},
+                   "default": {"chrome.exe", "brave.exe", "msedge.exe", "firefox.exe"}}
+        windows = Desktop(backend="uia").windows(visible_only=True)
+        active = None
+        try:
+            active = Desktop(backend="uia").get_active()
+        except Exception:
+            pass
+        candidates = ([active] if active is not None else []) + [w for w in windows if w != active]
+        for window in candidates:
+            if window is None:
+                continue
+            try:
+                pid = window.process_id()
+                exe = psutil.Process(pid).name().lower()
+                if exe not in allowed.get(browser, allowed["default"]):
+                    continue
+                window.restore()
+                window.set_focus()
+                time.sleep(0.25)
+                pyautogui.hotkey("ctrl", "l")
+                pyautogui.write(url, interval=0.001)
+                pyautogui.press("enter")
+                return True
+            except Exception:
+                continue
+    except Exception:
+        return False
+    return False
+
 def _open_website(arguments: dict[str, Any]) -> dict[str, Any]:
     allowed = {"site", "search_query", "browser"}
     if set(arguments) - allowed:
@@ -236,13 +276,15 @@ def _open_website(arguments: dict[str, Any]) -> dict[str, Any]:
         executable = _browser_executable(browser)
         if browser != "default" and executable is None:
             return {"ok": False, "error": f"Could not find the installed {browser.title()} browser."}
+        if _navigate_existing_browser(url, browser):
+            return {"ok": True, "message": f"Navigated the existing browser tab to {site.title()}" + (f" search for {query.strip()!r}." if query.strip() else "."), "url": url, "reused_window": True}
         if executable:
             subprocess.Popen([executable, url], shell=False)
         else:
             opened = webbrowser.open(url, new=0)
             if not opened:
                 return {"ok": False, "error": "Windows could not open the default browser."}
-        return {"ok": True, "message": f"Opened {site.title()}" + (f" search for {query.strip()!r}." if query.strip() else "."), "url": url}
+        return {"ok": True, "message": f"Opened {site.title()}" + (f" search for {query.strip()!r}." if query.strip() else "."), "url": url, "reused_window": False}
     except (OSError, subprocess.SubprocessError) as exc:
         return {"ok": False, "error": f"Could not open the requested website ({type(exc).__name__})."}
 
@@ -266,10 +308,12 @@ def _play_youtube_video(arguments: dict[str, Any]) -> dict[str, Any]:
         if not first or not first.get("id"):
             return {"ok": False, "error": "No matching YouTube video was found."}
         url = "https://www.youtube.com/watch?v=" + first["id"]
-        opened = webbrowser.open(url, new=0)
-        if not opened:
-            return {"ok": False, "error": "Windows could not open the YouTube video."}
-        return {"ok": True, "message": "Opened the first matching YouTube watch page. Autoplay depends on browser and YouTube settings.", "url": url}
+        reused = _navigate_existing_browser(url, "default")
+        if not reused:
+            opened = webbrowser.open(url, new=0)
+            if not opened:
+                return {"ok": False, "error": "Windows could not open the YouTube video."}
+        return {"ok": True, "message": "Opened the first matching YouTube watch page" + (" in the existing browser window." if reused else ".") + " Autoplay depends on browser and YouTube settings.", "url": url, "reused_window": reused}
     except Exception as exc:
         return {"ok": False, "error": "YouTube search/open failed (" + type(exc).__name__ + "). Install or update yt-dlp if needed."}
 

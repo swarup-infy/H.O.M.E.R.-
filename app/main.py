@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.ai.groq_client import AIProviderNotConfigured, ask_homer
+from app.ai.groq_client import AIProviderNotConfigured, ask_homer, clear_history
 from app.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +41,13 @@ async def health() -> dict[str, str | bool]:
         "model": settings.groq_model,
         "api_key_configured": bool(settings.groq_api_key),
     }
+
+
+@app.post("/chat/reset")
+async def reset_chat() -> dict[str, str]:
+    """Clear HOMER's short-term conversation context for a fresh chat."""
+    await clear_history()
+    return {"status": "ok", "message": "Conversation context cleared."}
 
 
 @app.post("/chat", response_model=ChatResponse)

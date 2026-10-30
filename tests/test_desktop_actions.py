@@ -39,7 +39,7 @@ def test_spotify_search_encodes_query():
         )
     assert result["ok"] is True
     assert result["url"] == "https://open.spotify.com/search/Arijit+Singh"
-    open_browser.assert_called_once_with(result["url"], new=2)
+    open_browser.assert_called_once_with(result["url"], new=0)
 
 
 def test_browser_choice_is_validated():

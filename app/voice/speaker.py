@@ -1,8 +1,8 @@
-"""Thread-safe Windows text-to-speech for HOMER.
+"""Reliable Windows text-to-speech for HOMER.
 
-A single dedicated thread owns the pyttsx3/SAPI engine for its entire lifetime.
-Voice recognition and network calls run in Qt worker threads, so using a
-persistent SAPI engine from those changing threads can make later replies silent.
+Each reply gets a fresh SAPI engine. This avoids silent subsequent replies caused
+by a reused pyttsx3/SAPI event loop on Windows. A single worker thread owns all
+speech engines, and each queued request receives a completion/error signal.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import logging
 import queue
 import re
 import threading
-from typing import Optional
+from dataclasses import dataclass, field
 
 import pyttsx3
 
@@ -19,8 +19,17 @@ logger = logging.getLogger(__name__)
 VOICE_NAME = "Microsoft David Desktop"
 SPEECH_RATE = 165
 VOLUME = 1.0
+SPEECH_TIMEOUT_SECONDS = 90.0
 
-_speech_queue: queue.Queue[Optional[str]] = queue.Queue()
+
+@dataclass
+class _SpeechRequest:
+    text: str
+    done: threading.Event = field(default_factory=threading.Event)
+    errors: list[BaseException] = field(default_factory=list)
+
+
+_speech_queue: queue.Queue[_SpeechRequest | None] = queue.Queue()
 _start_lock = threading.Lock()
 _speech_thread: threading.Thread | None = None
 _ready = threading.Event()
@@ -45,16 +54,16 @@ def prepare_text(text: str) -> str:
 
 
 def _make_engine():
-    """Create SAPI on the dedicated TTS thread."""
+    """Create a new SAPI engine on the dedicated speech thread."""
     engine = pyttsx3.init("sapi5")
     voices = engine.getProperty("voices") or []
     selected = next(
-        (v for v in voices if VOICE_NAME.casefold() in v.name.casefold()),
+        (voice for voice in voices if VOICE_NAME.casefold() in voice.name.casefold()),
         None,
     )
     if selected is None:
         selected = next(
-            (v for v in voices if "english" in v.name.casefold()),
+            (voice for voice in voices if "english" in voice.name.casefold()),
             None,
         )
     if selected is not None:
@@ -65,49 +74,32 @@ def _make_engine():
 
 
 def _speech_worker() -> None:
-    """Own and operate the speech engine on one stable thread."""
+    """Process speech requests serially; isolate each reply in a fresh engine."""
     global _start_error
-    engine = None
-    try:
-        engine = _make_engine()
-        _ready.set()
-        while True:
-            text = _speech_queue.get()
+    _ready.set()
+    while True:
+        request = _speech_queue.get()
+        try:
+            if request is None:
+                return
+            engine = None
             try:
-                if text is None:
-                    return
-                engine.say(text)
+                engine = _make_engine()
+                engine.say(request.text)
                 engine.runAndWait()
-            except Exception:
-                logger.exception("HOMER speech playback failed; rebuilding the SAPI engine.")
-                try:
-                    engine.stop()
-                except Exception:
-                    pass
-                try:
-                    engine = _make_engine()
-                    engine.say(text)
-                    engine.runAndWait()
-                except Exception:
-                    logger.exception("HOMER could not recover its speech engine.")
-                    # Rebuild before processing the next response.
-                    try:
-                        engine = _make_engine()
-                    except Exception:
-                        logger.exception("Could not reinitialize Windows SAPI.")
-                        engine = None
+            except BaseException as exc:
+                request.errors.append(exc)
+                logger.exception("HOMER could not play a speech response.")
             finally:
-                _speech_queue.task_done()
-    except BaseException as exc:
-        _start_error = exc
-        logger.exception("HOMER text-to-speech engine failed to start.")
-        _ready.set()
-    finally:
-        if engine is not None:
-            try:
-                engine.stop()
-            except Exception:
-                pass
+                if engine is not None:
+                    try:
+                        engine.stop()
+                    except Exception:
+                        logger.debug("Ignoring an error while stopping SAPI.", exc_info=True)
+        finally:
+            if request is not None:
+                request.done.set()
+            _speech_queue.task_done()
 
 
 def _ensure_worker() -> None:
@@ -129,16 +121,20 @@ def _ensure_worker() -> None:
 
 
 def speak(text: str) -> None:
-    """Queue every HOMER reply for sequential playback; wait until it has finished."""
+    """Speak one response and return only after playback finishes or fails."""
     text = prepare_text(text)
     if not text:
         logger.warning("HOMER received an empty response for speech.")
         return
     _ensure_worker()
-    # Queue.join() ensures the UI doesn't mark the assistant as listening
-    # while the current answer is still speaking.
-    _speech_queue.put(text)
-    _speech_queue.join()
+    request = _SpeechRequest(text=text)
+    _speech_queue.put(request)
+    if not request.done.wait(timeout=SPEECH_TIMEOUT_SECONDS):
+        raise RuntimeError(
+            f"HOMER voice playback did not finish within {SPEECH_TIMEOUT_SECONDS:.0f} seconds."
+        )
+    if request.errors:
+        raise RuntimeError(f"Windows text-to-speech failed: {request.errors[0]}") from request.errors[0]
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ def test_youtube_search_encodes_query_and_uses_default_browser():
         )
     assert result["ok"] is True
     assert result["url"] == "https://www.youtube.com/results?search_query=lofi+music"
-    open_browser.assert_called_once_with(result["url"], new=2)
+    open_browser.assert_called_once_with(result["url"], new=0)
 
 
 def test_spotify_search_encodes_query():

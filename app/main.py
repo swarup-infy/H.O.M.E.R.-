@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.ai.groq_client import AIProviderNotConfigured, ask_homer, clear_history
 from app.ai.vision_client import ask_about_image
 from app.config import get_settings
+from app.jobs.routes import router as jobs_router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,6 +19,7 @@ app = FastAPI(
     description="API-first desktop assistant prototype with a single allowlisted action.",
     version="0.1.0",
 )
+app.include_router(jobs_router)
 
 
 class ChatRequest(BaseModel):

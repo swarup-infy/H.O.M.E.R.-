@@ -8,8 +8,7 @@ import io
 import httpx
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QTimer
-from PySide6.QtGui import QFont, QDesktopServices
-from PySide6.QtCore import QUrl
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -19,8 +18,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QInputDialog,
-    QDialog,
-    QTextEdit,
     QMainWindow,
     QPushButton,
     QScrollArea,
@@ -137,184 +134,6 @@ class MessageBubble(QFrame):
 
         layout.addWidget(name_label)
         layout.addWidget(message_label)
-
-
-class JobSearchDialog(QDialog):
-    """Desktop interface for external job searches and the local application tracker."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("HOMER | Job Search AI")
-        self.resize(900, 720)
-        self.setMinimumSize(700, 560)
-        layout = QVBoxLayout(self)
-
-        title = QLabel("Job Search AI")
-        title.setObjectName("pageTitle")
-        description = QLabel(
-            "Search several job sites at once. Each button opens that site's search page; "
-            "HOMER does not yet collect live listings into one feed."
-        )
-        description.setWordWrap(True)
-        description.setObjectName("hint")
-        layout.addWidget(title)
-        layout.addWidget(description)
-
-        search_row = QHBoxLayout()
-        self.query_input = QLineEdit()
-        self.query_input.setPlaceholderText("Job title or skills (e.g. Python AI Engineer)")
-        self.location_input = QLineEdit()
-        self.location_input.setPlaceholderText("Location (e.g. Remote, India)")
-        self.search_button = QPushButton("Search jobs")
-        self.search_button.clicked.connect(self.search_jobs)
-        self.query_input.returnPressed.connect(self.search_jobs)
-        self.location_input.returnPressed.connect(self.search_jobs)
-        search_row.addWidget(self.query_input, 2)
-        search_row.addWidget(self.location_input, 1)
-        search_row.addWidget(self.search_button)
-        layout.addLayout(search_row)
-
-        self.search_status = QLabel("Enter a role and location, then click Search jobs.")
-        self.search_status.setObjectName("hint")
-        layout.addWidget(self.search_status)
-
-        self.results_area = QScrollArea()
-        self.results_area.setWidgetResizable(True)
-        self.results_container = QWidget()
-        self.results_layout = QVBoxLayout(self.results_container)
-        self.results_layout.addStretch()
-        self.results_area.setWidget(self.results_container)
-        layout.addWidget(self.results_area, 1)
-
-        tracker_title = QLabel("My Application Tracker")
-        tracker_title.setObjectName("pageTitle")
-        layout.addWidget(tracker_title)
-        self.tracker_view = QTextEdit()
-        self.tracker_view.setReadOnly(True)
-        self.tracker_view.setPlaceholderText("Your locally saved applications will appear here.")
-        self.tracker_view.setMaximumHeight(125)
-        layout.addWidget(self.tracker_view)
-
-        tracker_buttons = QHBoxLayout()
-        refresh_button = QPushButton("Refresh applications")
-        refresh_button.clicked.connect(self.refresh_applications)
-        add_button = QPushButton("Add application manually")
-        add_button.clicked.connect(self.add_application)
-        tracker_buttons.addWidget(refresh_button)
-        tracker_buttons.addWidget(add_button)
-        layout.addLayout(tracker_buttons)
-
-        self.refresh_applications()
-
-    def search_jobs(self):
-        query = self.query_input.text().strip()
-        location = self.location_input.text().strip()
-        if not query:
-            QMessageBox.information(self, "Job Search", "Enter a job title or skills first.")
-            self.query_input.setFocus()
-            return
-
-        self.search_button.setEnabled(False)
-        self.search_status.setText("Searching supported job sites...")
-        QApplication.processEvents()
-        try:
-            response = httpx.get(
-                f"{API_BASE_URL}/jobs/search",
-                params={"q": query, "location": location},
-                timeout=15.0,
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except httpx.HTTPError as exc:
-            self.search_status.setText(f"Could not search. Check that HOMER's API is running. Details: {exc}")
-            return
-        except ValueError:
-            self.search_status.setText("The API returned an invalid response.")
-            return
-        finally:
-            self.search_button.setEnabled(True)
-
-        while self.results_layout.count():
-            item = self.results_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-
-        results = payload.get("results", [])
-        self.search_status.setText(f"{len(results)} job-site search links ready.")
-        for result in results:
-            card = QFrame()
-            card.setObjectName("assistantBubble")
-            card_layout = QHBoxLayout(card)
-            label = QLabel(result.get("source", "Job site"))
-            label.setStyleSheet("font-weight: 600;")
-            open_button = QPushButton("Open search ↗")
-            url = result.get("search_url", "")
-            open_button.clicked.connect(
-                lambda checked=False, target=url: QDesktopServices.openUrl(QUrl(target))
-            )
-            card_layout.addWidget(label, 1)
-            card_layout.addWidget(open_button)
-            self.results_layout.addWidget(card)
-
-        self.results_layout.addStretch()
-        if not results:
-            self.search_status.setText("No search links were returned.")
-
-    def refresh_applications(self):
-        try:
-            response = httpx.get(f"{API_BASE_URL}/jobs/applications", timeout=8.0)
-            response.raise_for_status()
-            records = response.json().get("applications", [])
-        except httpx.HTTPError:
-            self.tracker_view.setPlainText("Cannot load applications. Check that HOMER's API is running.")
-            return
-
-        if not records:
-            self.tracker_view.setPlainText("No saved applications yet. Use 'Add application manually' to track a job.")
-            return
-        lines = []
-        for record in records:
-            lines.append(
-                f"{record.get('job_title', 'Untitled')} — {record.get('company', 'Unknown company')}\n"
-                f"Status: {record.get('status', 'saved')} | Location: {record.get('location') or 'Not specified'}\n"
-                f"URL: {record.get('job_url') or 'Not provided'}"
-            )
-        self.tracker_view.setPlainText("\n\n".join(lines))
-
-    def add_application(self):
-        company, accepted = QInputDialog.getText(self, "Add application", "Company name:")
-        if not accepted or not company.strip():
-            return
-        job_title, accepted = QInputDialog.getText(self, "Add application", "Job title:")
-        if not accepted or not job_title.strip():
-            return
-        job_url, accepted = QInputDialog.getText(self, "Add application", "Job URL (optional):")
-        if not accepted:
-            return
-        location, accepted = QInputDialog.getText(self, "Add application", "Location (optional):")
-        if not accepted:
-            return
-
-        try:
-            response = httpx.post(
-                f"{API_BASE_URL}/jobs/applications",
-                json={
-                    "company": company.strip(),
-                    "job_title": job_title.strip(),
-                    "job_url": job_url.strip() or None,
-                    "location": location.strip() or None,
-                    "status": "saved",
-                },
-                timeout=8.0,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError:
-            QMessageBox.warning(self, "Job Search", "Could not save the application. Check HOMER's API and try again.")
-            return
-
-        self.refresh_applications()
-        QMessageBox.information(self, "Job Search", "Application saved locally. Nothing was submitted to the employer.")
 
 
 class HomerWindow(QMainWindow):
@@ -529,11 +348,6 @@ class HomerWindow(QMainWindow):
         )
         vision_button.clicked.connect(self.open_gesture_controls)
 
-        jobs_button = QPushButton("⌕  Job Search AI")
-        jobs_button.setObjectName("secondaryButton")
-        jobs_button.setToolTip("Search supported job sites and track applications.")
-        jobs_button.clicked.connect(self.open_job_search)
-
         globe_button = QPushButton("◎  God's Eye View")
         globe_button.setObjectName("secondaryButton")
         globe_button.setToolTip("Open a local geospatial globe workspace.")
@@ -551,7 +365,6 @@ class HomerWindow(QMainWindow):
         sidebar_layout.addWidget(future_button)
         sidebar_layout.addWidget(vision_button)
         sidebar_layout.addWidget(globe_button)
-        sidebar_layout.addWidget(jobs_button)
         sidebar_layout.addStretch()
 
         footer = QLabel("HOMER DESKTOP\nVersion 0.1.0")
@@ -635,18 +448,6 @@ class HomerWindow(QMainWindow):
 
         root.addWidget(sidebar)
         root.addWidget(main_panel, 1)
-
-    def open_job_search(self):
-        """Open the job search and local application tracker workspace."""
-        try:
-            if not hasattr(self, "job_search_dialog") or self.job_search_dialog is None:
-                self.job_search_dialog = JobSearchDialog(self)
-            self.job_search_dialog.show()
-            self.job_search_dialog.raise_()
-            self.job_search_dialog.activateWindow()
-        except Exception as exc:
-            self.set_status(f"Could not open Job Search AI: {exc}")
-            self.add_message("HOMER", f"Could not open Job Search AI: {exc}")
 
     def open_voice_assistant(self):
         """Open the dedicated animated voice-assistant window."""

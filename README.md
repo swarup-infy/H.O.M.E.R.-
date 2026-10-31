@@ -94,3 +94,8 @@ frames are processed locally and are not sent to the AI provider.
 ## Attribution
 
 See [docs/COMPONENTS.md](docs/COMPONENTS.md) for source projects and licensing.
+
+
+### Local job-search toolkit
+
+HOMER also includes a local-first job-search API. It can score a job against skills, target roles and preferred locations, list missing required skills, and track application status in a local JSON file. Scoring does not call Groq. It does not scrape job portals, submit applications, or contact employers. See [docs/JOB_SEARCH.md](docs/JOB_SEARCH.md) for API examples and privacy details.

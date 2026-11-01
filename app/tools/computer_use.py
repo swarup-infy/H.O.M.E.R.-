@@ -478,16 +478,7 @@ def close_window(application: str) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Named window close failed")
         return {"ok": False, "error": "Could not close the requested window (" + type(exc).__name__ + ")."}
-        pyautogui.click(int(x), int(y))
-        return {"ok": True, "method": "vision", "target": target, "x": int(x), "y": int(y),
-                "message": "Clicked the visually located target. The resulting state still needs verification."}
-    except Exception as exc:
-        logger.exception("Visual screen click failed")
-        return {"ok": False, "method": "vision", "error": f"Visual click failed ({type(exc).__name__})."}
 
-
-def close_window(application: str) -> dict[str, Any]:
-    """Close a single top-level window by process or title without killing all tabs."""
     error = _windows_only()
     if error:
         return error

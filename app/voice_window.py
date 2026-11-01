@@ -725,10 +725,8 @@ class VoiceAssistantWindow(QMainWindow):
         self.thread = None
 
     def showEvent(self, event) -> None:  # noqa: N802
+        """Show the voice UI without silently enabling microphone capture."""
         super().showEvent(event)
-        if not self._auto_listen_started:
-            self._auto_listen_started = True
-            QTimer.singleShot(900, self.toggle_always_listening)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if self.worker is not None:

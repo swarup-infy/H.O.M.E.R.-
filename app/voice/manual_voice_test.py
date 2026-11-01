@@ -1,8 +1,25 @@
-import speech_recognition as sr
-import pyttsx3
+"""Manual microphone and speech-output smoke test.
+
+Run explicitly with:
+    python -m app.voice.manual_voice_test
+
+This is an interactive hardware check, not an automated pytest test.
+Install optional dependencies first:
+    python -m pip install -r requirements-voice.txt
+"""
+from __future__ import annotations
 
 
-def main():
+def main() -> None:
+    try:
+        import speech_recognition as sr
+        import pyttsx3
+    except ImportError as exc:
+        raise SystemExit(
+            "Voice dependencies are missing. Install them with: "
+            "python -m pip install -r requirements-voice.txt"
+        ) from exc
+
     speaker = pyttsx3.init()
     speaker.setProperty("rate", 165)
 
@@ -35,13 +52,10 @@ def main():
 
     except sr.WaitTimeoutError:
         print("No speech detected.")
-
     except sr.UnknownValueError:
         print("I couldn't understand that. Please speak a little more clearly.")
-
     except sr.RequestError as exc:
         print(f"Speech recognition service error: {exc}")
-
     except Exception as exc:
         print(f"Error: {type(exc).__name__}: {exc}")
 

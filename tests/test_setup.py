@@ -29,3 +29,11 @@ def test_setup_uses_current_python_for_pip(monkeypatch):
     assert setup.install_core() == 0
     assert captured["cmd"][:3] == [setup.sys.executable, "-m", "pip"]
     assert captured["cmd"][-1].endswith("requirements.txt")
+
+
+def test_manual_hardware_checks_are_not_named_as_pytest_tests():
+    root = Path(__file__).resolve().parents[1]
+    assert (root / "manual_voice_test.py").is_file()
+    assert (root / "app" / "voice" / "manual_voice_test.py").is_file()
+    assert not (root / "test_voice.py").exists()
+    assert not (root / "app" / "voice" / "test_voice.py").exists()

@@ -3,12 +3,8 @@
 Uses Windows UI Automation for named controls first, then a hosted vision model
 for coordinate grounding when UIA cannot expose the target. Runs only in response
 to an explicit user task; it does not execute shell commands or read credentials.
-Screenshot pixels are sent to Groq only for a requested visual click.
-"""UI Automation first, screenshot-grounded fallback for HOMER on Windows.
-
-Only runs after HOMER receives an explicit user task. Never executes shell commands
-or reads browser credentials. Screenshot pixels are sent to the configured Groq
-vision model only for a requested visual click.
+Screenshot pixels are sent to the configured Groq vision model only for a requested
+visual click.
 """
 from __future__ import annotations
 

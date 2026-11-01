@@ -14,6 +14,7 @@ class Settings:
     def __init__(self) -> None:
         self.groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
         self.groq_model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip()
+        self.groq_vision_model = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b").strip()
         self.max_message_chars = 2000
 
 

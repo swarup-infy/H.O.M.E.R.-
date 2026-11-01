@@ -1,76 +1,154 @@
-# JARVIS API MVP
+# HOMER — Setup & First-Run Guide
 
-A first, deliberately small Windows desktop-assistant backend. It uses Groq for language-model responses and has one allowlisted local action: opening Notepad. It does **not** yet include a GUI, microphone, webcam, memory, web search, or arbitrary shell/PowerShell execution.
+HOMER is a native Windows desktop assistant backed by a local FastAPI service and a hosted Groq API. The language model runs remotely; you do **not** need a local LLM or a GPU. Core chat, optional voice, and optional webcam gesture controls are installed separately.
 
-## 1. Requirements
+## Requirements
 
-- Windows 10/11, 64-bit
-- Python 3.11 recommended for the broader project roadmap
-- A Groq API key and internet access for AI responses
+- Windows 10/11 (the desktop shell and computer-use integrations are Windows-oriented).
+- Python 3.11 or 3.12 (64-bit recommended).
+- Git.
+- Microphone and speakers only for voice features.
+- Webcam only for gesture controls.
+- A Groq API key: https://console.groq.com/keys
+- Internet for hosted AI responses, package installation, and the current Google SpeechRecognition voice mode.
 
-Check installed Python versions in PowerShell:
+## 1. Clone HOMER
 
 ```powershell
-py -0p
+git clone https://github.com/swarup-infy/H.O.M.E.R.-.git
+cd H.O.M.E.R.-
 ```
 
-## 2. Create an environment
+## 2. Create an isolated Python environment
 
-Open PowerShell in this folder:
+Use the Python launcher on Windows:
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
 ```
 
-If Python 3.11 is not installed, install it or use a Python version supported by the chosen libraries. Do not mix this project's dependencies into another project's virtual environment.
-
-If PowerShell blocks activation, use this for the current terminal session only:
+If PowerShell blocks activation for this terminal, run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-## 3. Configure the API key
+Alternatively, skip activation and use the virtual-environment interpreter directly: `.venv\Scripts\python.exe`.
+
+## 3. Install core dependencies
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+The core requirements include the API, native desktop UI and supported computer-use dependencies. Optional feature packs are separate:
+
+```powershell
+# Voice assistant: microphone recognition, speech output and local Whisper transcription
+python -m pip install -r requirements-voice.txt
+
+# Webcam hand tracking / gesture mouse
+python -m pip install -r requirements-vision.txt
+```
+
+Install only the optional packs you plan to use. The first local Whisper transcription may download model weights. The webcam feature requires camera permission.
+
+## 4. Configure your Groq API key
+
+Create your local environment file:
 
 ```powershell
 Copy-Item .env.example .env
 notepad .env
 ```
 
-Replace `GROQ_API_KEY=replace_me` with your key. Keep `.env` private and never commit it to Git. `GROQ_MODEL` must be a model ID currently available to your Groq account; model availability and pricing may change.
+Set your key and choose a model available to your Groq account:
 
-## 4. Run the backend
-
-```powershell
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```dotenv
+GROQ_API_KEY=your_actual_key_here
+GROQ_MODEL=openai/gpt-oss-20b
+GROQ_VISION_MODEL=qwen/qwen3.8-27b
 ```
 
-Open `http://127.0.0.1:8000/docs` in your browser.
+Never commit `.env`, paste keys into screenshots, or share them in issues. The `.env.example` file is safe to commit because it contains placeholders only.
 
-- `GET /health` confirms the backend is alive and whether the key setting is present (it never returns the key).
-- `POST /chat` accepts `{"message":"Say hello"}`.
-- Try `{"message":"Open Notepad"}` to test the single approved desktop action on Windows.
+## 5. Validate the installation
 
-Keep the server bound to `127.0.0.1` during development. Do not expose it directly to a public network.
-
-## 5. Run unit tests
-
-In another PowerShell terminal with the virtual environment active:
+Run the built-in setup diagnostic:
 
 ```powershell
-pytest -q
+python setup.py --check
 ```
 
-These tests validate the action registry without opening real applications. The live Groq API has not been tested as part of this scaffold; it requires your own key and a model your account can access.
+Run automated tests:
 
-## Safety limits
+```powershell
+python -m pytest -q
+```
 
-- No arbitrary shell, PowerShell or Python execution.
-- Only the `open_notepad` tool is registered.
-- The tool accepts no arguments and only runs on Windows.
-- The API key stays in the backend `.env` file.
-- Do not add file deletion, message sending, installation or shutdown actions without explicit validation and confirmation.
+The diagnostic checks Python version, required imports, environment configuration and optional feature availability. It does not call Groq or access your microphone or camera.
+
+## 6. Start HOMER
+
+Start the API in the first PowerShell window:
+
+```powershell
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+In a second PowerShell window, from the repository root with the same virtual environment active, launch the native desktop app:
+
+```powershell
+python -m app.desktop
+```
+
+You can also open the API documentation at http://127.0.0.1:8000/docs and check http://127.0.0.1:8000/health. Keep the API bound to `127.0.0.1`; do not expose the development server to your network.
+
+## 7. Optional voice and gesture features
+
+- **Voice assistant:** install `requirements-voice.txt`, then open **Voice assistant** from the HOMER desktop sidebar. The current continuous-listening control is explicit and can be switched off. Speech recognition currently uses Google's online recognition service; the optional faster-whisper module is local CPU transcription for audio files and is not the live microphone backend.
+- **Gesture controls:** install `requirements-vision.txt`, then choose **Gesture controls**. Camera access starts only after you open the feature. Close its window to release the camera.
+- **Screen awareness:** choose **Ask about screen** and confirm before sharing the screenshot with your configured hosted vision model. Do not share screens containing passwords or sensitive information.
+
+### Wake word status
+
+A hands-free wake phrase such as “Hey HOMER” is not currently included in the shipped voice flow. It is intentionally not simulated as a feature. A future wake-word engine should be optional, locally processed, visibly enabled, and disabled by default. Continuous listening must never start invisibly.
+
+## Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| `py -3.11` is not found | Install Python 3.11 or 3.12 (enable the Python Launcher), reopen PowerShell and verify with `py --list`. |
+| Activation is blocked | Use the process-scoped execution-policy command above, or invoke `.venv\Scripts\python.exe` directly. |
+| `GROQ_API_KEY` missing | Check that `.env` is in the repository root and contains a valid key. |
+| Model/provider error (HTTP 502) | Check the API terminal, model availability in your Groq account, and internet connection. |
+| Port 8000 is occupied | Stop the other HOMER server, or choose a different port and update `HOMER_API_URL` where supported. |
+| Voice packages fail on Windows | Confirm the active environment is 64-bit Python 3.11/3.12, then install the voice pack separately. |
+| Camera unavailable | Close other camera applications and check Windows camera permissions. |
+
+## Quick start
+
+```powershell
+git clone https://github.com/swarup-infy/H.O.M.E.R.-.git
+cd H.O.M.E.R.-
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Add GROQ_API_KEY to .env
+python setup.py --check
+# Terminal 1:
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+# Terminal 2:
+python -m app.desktop
+```
+
+## Video walkthrough
+
+The Mark LIII video channel can be used as general inspiration for assistant workflows, but its setup commands and Gemini key instructions are not HOMER setup instructions: https://www.youtube.com/@FatihMakes
+
+Run the interactive microphone/speaker smoke test after installing the voice pack with `python -m app.voice.manual_voice_test` (root-level alternative: `python manual_voice_test.py`). This manually opens the microphone and plays audio; it is not part of automated CI. See also [voice docs](app/voice/README.md), [gesture docs](app/vision/README.md), and [component attribution](docs/COMPONENTS.md).

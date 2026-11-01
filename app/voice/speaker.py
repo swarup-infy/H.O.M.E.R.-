@@ -79,7 +79,7 @@ def _make_engine():
 
 def _speech_worker() -> None:
     """Process speech requests serially; isolate each reply in a fresh engine."""
-    global _start_error, _active_engine
+    global _active_engine
     _ready.set()
     while True:
         request = _speech_queue.get()

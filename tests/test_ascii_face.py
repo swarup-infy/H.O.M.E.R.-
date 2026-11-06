@@ -1,6 +1,14 @@
-"""Pure rendering tests for HOMER's animated ASCII face."""
+"""Rendering and Qt smoke tests for HOMER's animated ASCII face."""
 
-from app.ascii_face import normalize_face_state, render_ascii_face
+import os
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication
+
+from app.ascii_face import AsciiHomerFace, normalize_face_state, render_ascii_face
 
 
 def test_all_supported_states_render_a_five_line_face() -> None:
@@ -50,3 +58,26 @@ def test_frame_index_wraps_and_invalid_index_is_safe() -> None:
     assert render_ascii_face("SPEAKING", "not-a-number") == render_ascii_face(
         "SPEAKING", 0
     )
+
+
+@pytest.fixture(scope="module")
+def qt_app():
+    """Create one offscreen Qt application for widget smoke tests."""
+    return QApplication.instance() or QApplication([])
+
+
+def test_widget_changes_animation_state_and_frame(qt_app) -> None:
+    face = AsciiHomerFace(compact=True)
+    face.set_state("THINKING")
+    thinking_frame = face.face_label.text()
+
+    face._advance_frame()
+    assert face.face_label.text() != thinking_frame
+
+    face.set_state("SPEAKING")
+    assert face.current_state == "SPEAKING"
+    assert "SPEAKING" in face.state_label.text()
+
+    face._timer.stop()
+    face.close()
+    qt_app.processEvents()

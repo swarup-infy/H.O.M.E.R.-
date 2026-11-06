@@ -234,10 +234,35 @@ def _format_direct_result(tool_name: str, result: dict[str, Any]) -> str:
             "control could not be activated automatically: "
             + str(playback.get("error", "the player did not confirm playback."))
         )
-    if tool_name in {"close_named_window", "close_active_window"}:
+    if tool_name == "read_screen":
+        return str(result.get("answer", "I captured the screen but could not read an answer.")) + (
+            " " + str(result.get("privacy")) if result.get("privacy") else ""
+        )
+    if tool_name == "browser_control":
+        if "paused" in result:
+            state = "paused" if result["paused"] else "playing"
+            volume = result.get("volume")
+            suffix = f" Volume is {volume}%." if volume is not None else ""
+            return f"The browser media player is {state}.{suffix}"
+        if "tabs" in result:
+            tabs = result.get("tabs") or []
+            return "HOMER browser has " + str(len(tabs)) + " tab(s): " + "; ".join(
+                f"{tab.get('tab_index') + 1}. {tab.get('title') or tab.get('url') or 'New tab'}"
+                for tab in tabs
+            )
+        if result.get("title") or result.get("url"):
+            return "Browser page: " + str(result.get("title") or result.get("url")) + "."
+    if tool_name in {"close_named_window", "close_active_window", "close_window_by_title"}:
         if result.get("still_visible_after_request"):
             return "I sent the close request, but the window is still visible. It may need attention for an unsaved-work prompt."
         return str(result.get("message", "The close request was sent."))
+    if tool_name == "list_open_windows":
+        windows = result.get("windows") or []
+        return "I found " + str(len(windows)) + " visible window(s): " + "; ".join(
+            item.get("title", "Untitled") for item in windows[:8]
+        )
+    if result.get("focused"):
+        return "Focused the " + str(result["focused"]) + " window."
     return str(result.get("message", "The desktop action was attempted."))
 
 

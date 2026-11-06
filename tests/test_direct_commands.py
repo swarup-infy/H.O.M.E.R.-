@@ -150,3 +150,26 @@ def test_browser_refresh_routes_to_reload():
     assert groq_client._direct_desktop_command("Refresh the page") == (
         "browser_control", {"action": "reload"}
     )
+
+
+def test_read_screen_direct_command_returns_actual_vision_answer():
+    with (
+        patch.object(groq_client, "get_settings") as settings,
+        patch.object(groq_client, "execute_tool", return_value={
+            "ok": True,
+            "answer": "I can see YouTube open with a paused video.",
+            "privacy": "One screenshot was sent to Groq.",
+        }),
+    ):
+        settings.return_value.chat_history_messages = 20
+        reply = asyncio.run(groq_client.ask_homer("Read my screen"))
+    assert "I can see YouTube open with a paused video." in reply
+    assert "One screenshot was sent to Groq." in reply
+
+
+def test_browser_media_result_reports_playback_and_volume():
+    reply = groq_client._format_direct_result(
+        "browser_control", {"ok": True, "paused": False, "volume": 70}
+    )
+    assert "playing" in reply
+    assert "70%" in reply

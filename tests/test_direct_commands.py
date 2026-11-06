@@ -138,3 +138,15 @@ def test_maximize_window_by_title_routes_directly():
     assert groq_client._direct_desktop_command("Maximize window titled HOMER") == (
         "maximize_window", {"title": "HOMER"}
     )
+
+
+def test_browser_back_routes_to_history_navigation():
+    assert groq_client._direct_desktop_command("Go back a page") == (
+        "browser_control", {"action": "back"}
+    )
+
+
+def test_browser_refresh_routes_to_reload():
+    assert groq_client._direct_desktop_command("Refresh the page") == (
+        "browser_control", {"action": "reload"}
+    )

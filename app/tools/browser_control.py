@@ -135,7 +135,7 @@ def browser_action(
     """Perform one validated action in HOMER's visible browser."""
     global _active_index
     valid_actions = {
-        "open", "navigate", "tabs", "new_tab", "select_tab", "close_tab",
+        "open", "navigate", "back", "forward", "reload", "tabs", "new_tab", "select_tab", "close_tab",
         "snapshot", "click_text", "type_text", "press_key",
         "play", "pause", "toggle", "stop", "volume", "volume_up",
         "volume_down", "seek",
@@ -167,6 +167,15 @@ def browser_action(
                 if not _allowed_url(url):
                     return {"ok": False, "error": "Only allowlisted HTTPS sites can be opened in HOMER's browser."}
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                return {"ok": True, "title": page.title()[:160], "url": page.url}
+            if action == "back":
+                page.go_back(wait_until="domcontentloaded", timeout=15000)
+                return {"ok": True, "title": page.title()[:160], "url": page.url}
+            if action == "forward":
+                page.go_forward(wait_until="domcontentloaded", timeout=15000)
+                return {"ok": True, "title": page.title()[:160], "url": page.url}
+            if action == "reload":
+                page.reload(wait_until="domcontentloaded", timeout=15000)
                 return {"ok": True, "title": page.title()[:160], "url": page.url}
             if action == "select_tab":
                 _active_index = tab_index

@@ -123,6 +123,12 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
         return "maximize_window", {"title": maximize_match.group(1).strip(" .!?")[:120]}
 
     # Dedicated HOMER browser controls.
+    if re.search(r"\b(?:go back|previous page|back a page)\b", text):
+        return "browser_control", {"action": "back"}
+    if re.search(r"\b(?:go forward|next page)\b", text):
+        return "browser_control", {"action": "forward"}
+    if re.search(r"\b(?:refresh|reload)\s+(?:the\s+)?(?:page|website|tab)\b", text):
+        return "browser_control", {"action": "reload"}
     site_match = re.search(r"\b(?:open|visit|go to)\s+(?:the\s+)?(youtube|spotify|google|wikipedia|github|reddit|netflix|twitch|chatgpt|claude|perplexity)\b", text)
     if site_match:
         domains = {

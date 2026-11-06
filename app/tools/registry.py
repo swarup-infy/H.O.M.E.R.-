@@ -167,7 +167,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "additionalProperties": False,
             },
         },
-    }
+    },
     {
         "type": "function",
         "function": {
@@ -208,7 +208,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ["open", "navigate", "tabs", "new_tab", "select_tab", "close_tab", "snapshot", "click_text", "type_text", "press_key", "play", "pause", "toggle", "stop", "volume", "volume_up", "volume_down", "seek"]},
+                    "action": {"type": "string", "enum": ["open", "navigate", "back", "forward", "reload", "tabs", "new_tab", "select_tab", "close_tab", "snapshot", "click_text", "type_text", "press_key", "play", "pause", "toggle", "stop", "volume", "volume_up", "volume_down", "seek"]},
                     "url": {"type": "string", "maxLength": 2048},
                     "text": {"type": "string", "maxLength": 2000},
                     "tab_index": {"type": "integer", "minimum": -1, "maximum": 50},

@@ -118,7 +118,7 @@ HOMER exposes a local Model Context Protocol (MCP) server through the same FastA
 MCP tools include:
 - Screen metadata inspection and explicit one-shot visual screen reading.
 - Visible window listing, focusing, maximizing, normal closing, and launching known apps or an exact installed Start Menu shortcut by display name.
-- A dedicated, visible Chromium browser with tab management, page text snapshots, safe text clicks, typing, keyboard shortcuts, and HTML media play/pause/stop/volume/seek controls.
+- A dedicated, visible Chromium browser with tab management, back/forward/reload navigation, page text snapshots, safe text clicks, typing, keyboard shortcuts, and HTML media play/pause/stop/volume/seek controls.
 - Normal close requests for supported application windows.
 
 For VS Code, use [the MCP HTTP configuration example](docs/mcp-config-vscode.json). For Claude Desktop, copy [the stdio configuration example](docs/mcp-config-claude-desktop.example.json) and adjust its local HOMER folder path. To connect another compatible MCP client, configure a Streamable HTTP server with URL `http://127.0.0.1:8000/mcp/`. For a local stdio client instead, run `python -m app.mcp_server`. Do not run both transports against different copies if you expect the same browser session; the HTTP endpoint shares HOMER's FastAPI process.

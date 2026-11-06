@@ -82,7 +82,7 @@ def browser_control(
     volume: int = 50,
     seconds: int = 0,
 ) -> dict:
-    """Control HOMER's visible browser. Actions: open, navigate, tabs, new_tab, select_tab, close_tab, snapshot, click_text, type_text, press_key, play, pause, toggle, stop, volume, volume_up, volume_down, seek. Navigation is HTTPS and domain-allowlisted."""
+    """Control HOMER's visible browser. Actions: open, navigate, back, forward, reload, tabs, new_tab, select_tab, close_tab, snapshot, click_text, type_text, press_key, play, pause, toggle, stop, volume, volume_up, volume_down, seek. Navigation is HTTPS and domain-allowlisted."""
     return browser_action(action, url, text, tab_index, volume, seconds)
 
 

@@ -233,7 +233,7 @@ def index_knowledge_base(project_root: str | Path | None = None, db_path: Path |
 def search_knowledge(query: str, limit: int = 5, db_path: Path | None = None) -> list[SearchResult]:
     """Retrieve ranked chunks using SQLite FTS5 BM25; malformed queries fail closed."""
     stop_words = {"what", "when", "where", "which", "who", "why", "how", "the", "and", "for", "with", "from", "that", "this", "are", "was", "were", "is", "a", "an", "to", "of", "in", "on", "at", "it", "my", "your", "about", "please", "can", "you"}
-    terms = [term for term in re.findall(r"[\\w]{2,}", query.casefold()) if term not in stop_words][:20]
+    terms = [term for term in re.findall(r"[\w]{2,}", query.casefold()) if term not in stop_words][:20]
     if not terms:
         return []
     unique_terms = list(dict.fromkeys(terms))

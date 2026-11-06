@@ -191,6 +191,7 @@ async def ask_homer(user_message: str) -> str:
             tool_choice="auto",
             temperature=settings.groq_temperature,
             top_p=settings.groq_top_p,
+            reasoning_effort=settings.groq_reasoning_effort,
             max_completion_tokens=settings.groq_max_output_tokens,
         )
 
@@ -240,6 +241,7 @@ async def ask_homer(user_message: str) -> str:
                 tool_choice="auto",
                 temperature=settings.groq_temperature,
                 top_p=settings.groq_top_p,
+                reasoning_effort=settings.groq_reasoning_effort,
                 max_completion_tokens=settings.groq_max_output_tokens,
             )
         if tool_steps >= 4 and (response.choices[0].message.tool_calls or []):
@@ -255,6 +257,7 @@ async def ask_homer(user_message: str) -> str:
                 tool_choice="none",
                 temperature=settings.groq_temperature,
                 top_p=settings.groq_top_p,
+                reasoning_effort=settings.groq_reasoning_effort,
                 max_completion_tokens=settings.groq_max_output_tokens,
             )
             final_text = final_response.choices[0].message.content or json.dumps(last_tool_result)

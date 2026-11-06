@@ -77,7 +77,6 @@ def _ensure_browser():
 
 
 def _page(tab_index: int = -1):
-    global _active_index
     _ensure_browser()
     if not _pages:
         _pages.append(_context.new_page())

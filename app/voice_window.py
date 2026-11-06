@@ -720,8 +720,8 @@ class VoiceAssistantWindow(QMainWindow):
 
     def _clear_error_state(self) -> None:
         if self.face.current_state == "ERROR":
-            self._set_state("READY")
             self.face.set_state("READY")
+            self._set_state("READY")
 
     @Slot()
     def _task_finished(self) -> None:

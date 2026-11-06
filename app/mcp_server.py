@@ -5,7 +5,7 @@ The same tools are also exposed through the FastAPI /mcp/ endpoint.
 """
 from __future__ import annotations
 
-from mcp.server import MCPServer
+from mcp.server.mcpserver import MCPServer
 
 from app.tools.registry import execute_tool
 from app.tools.browser_control import browser_action, close_browser

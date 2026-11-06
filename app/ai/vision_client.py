@@ -41,6 +41,7 @@ async def ask_about_image(prompt: str, image_data_url: str) -> str:
             ],
             temperature=settings.groq_temperature,
             top_p=settings.groq_top_p,
+            reasoning_effort=settings.groq_reasoning_effort,
             max_completion_tokens=settings.groq_max_output_tokens,
         )
         return response.choices[0].message.content or "I couldn't read an answer from the vision model."

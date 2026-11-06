@@ -88,6 +88,7 @@ def test_chat_settings_returns_safe_active_configuration(monkeypatch) -> None:
         groq_model = "test-model"
         groq_temperature = 0.4
         groq_top_p = 0.9
+        groq_reasoning_effort = "high"
         groq_max_output_tokens = 600
         groq_timeout_seconds = 45.0
         groq_max_retries = 2
@@ -103,6 +104,7 @@ def test_chat_settings_returns_safe_active_configuration(monkeypatch) -> None:
         "model": "test-model",
         "temperature": 0.4,
         "top_p": 0.9,
+        "reasoning_effort": "high",
         "max_output_tokens": 600,
         "timeout_seconds": 45.0,
         "max_retries": 2,

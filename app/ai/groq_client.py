@@ -104,7 +104,7 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
         return "open_website", {"site": "youtube"}
 
     # Basic current media session controls.
-    if re.search(r"\b(?:pause|resume|unpause|stop)\s+(?:the\s+)?(?:music|song|track|video|playback)\b", text):
+    if re.search(r"\b(?:pause|resume|unpause)\s+(?:the\s+)?(?:music|song|track|playback)\b", text):
         return "media_play_pause", {}
     if re.fullmatch(r"(?:play|resume|unpause)(?:\s+the)?(?:\s+music|\s+song|\s+video)?", text):
         return "media_play_pause", {}
@@ -115,10 +115,10 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
 
     if re.search(r"\b(?:list|show)\s+(?:all\s+)?(?:open\s+)?windows\b", text):
         return "list_open_windows", {}
-    focus_match = re.search(r"\b(?:focus|switch to|bring forward)\s+(?:the\s+)?window\s+(?:titled|named|called)\s+(.+)", text)
+    focus_match = re.search(r"\b(?:focus|switch to|bring forward)\s+(?:the\s+)?window\s+(?:titled|named|called)\s+(.+)", message, re.IGNORECASE)
     if focus_match:
         return "focus_open_window", {"title": focus_match.group(1).strip(" .!?")[:120]}
-    maximize_match = re.search(r"\bmaximize\s+(?:the\s+)?window\s+(?:titled|named|called)\s+(.+)", text)
+    maximize_match = re.search(r"\bmaximize\s+(?:the\s+)?window\s+(?:titled|named|called)\s+(.+)", message, re.IGNORECASE)
     if maximize_match:
         return "maximize_window", {"title": maximize_match.group(1).strip(" .!?")[:120]}
 
@@ -163,7 +163,7 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
     tab_match = re.search(r"\b(?:switch to|select)\s+tab\s+(\d{1,2})\b", text)
     if tab_match:
         return "browser_control", {"action": "select_tab", "tab_index": max(0, int(tab_match.group(1)) - 1)}
-    close_title = re.search(r"\bclose\s+(?:the\s+)?window\s+(?:titled|named|called)\s+(.+)", text)
+    close_title = re.search(r"\bclose\s+(?:the\s+)?window\s+(?:titled|named|called)\s+(.+)", message, re.IGNORECASE)
     if close_title:
         return "close_window_by_title", {"title": close_title.group(1).strip(" .!?")[:120]}
     if re.search(r"\b(?:open|start)\s+(?:the\s+)?(?:homer\s+)?browser\b", text):

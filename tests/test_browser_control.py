@@ -42,6 +42,8 @@ def test_media_controls_follow_the_selected_tab(monkeypatch):
             self.label = label
         def bring_to_front(self):
             pass
+        def title(self):
+            return self.label
         def evaluate(self, _script, _args):
             return {"ok": True, "page": self.label}
 

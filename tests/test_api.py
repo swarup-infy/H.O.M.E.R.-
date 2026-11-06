@@ -9,6 +9,7 @@ client = TestClient(main.app)
 
 def test_health_does_not_expose_api_key(monkeypatch) -> None:
     class FakeSettings:
+        llm_provider = "groq"
         groq_api_key = "a-secret-test-key"
         groq_model = "test-model"
 
@@ -77,3 +78,51 @@ def test_chat_hides_provider_internal_errors(monkeypatch) -> None:
 
     assert response.status_code == 502
     assert "internal exception with secret details" not in response.text
+
+
+
+def test_chat_settings_returns_safe_active_configuration(monkeypatch) -> None:
+    class FakeSettings:
+        llm_provider = "groq"
+        groq_api_key = "a-secret-test-key"
+        groq_model = "test-model"
+        groq_temperature = 0.4
+        groq_top_p = 0.9
+        groq_max_output_tokens = 600
+        groq_timeout_seconds = 45.0
+        groq_max_retries = 2
+        chat_history_messages = 12
+        max_message_chars = 2000
+
+    monkeypatch.setattr(main, "get_settings", lambda: FakeSettings())
+    response = client.get("/chat/settings")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "provider": "groq",
+        "model": "test-model",
+        "temperature": 0.4,
+        "top_p": 0.9,
+        "max_output_tokens": 600,
+        "timeout_seconds": 45.0,
+        "max_retries": 2,
+        "history_messages": 12,
+        "max_message_chars": 2000,
+        "api_key_configured": True,
+    }
+    assert "a-secret-test-key" not in response.text
+
+
+def test_chat_enforces_configured_message_limit(monkeypatch) -> None:
+    class FakeSettings:
+        max_message_chars = 8
+
+    monkeypatch.setattr(main, "get_settings", lambda: FakeSettings())
+
+    async def should_not_run(_message: str) -> str:
+        raise AssertionError("AI provider should not be called for an oversized message")
+
+    monkeypatch.setattr(main, "ask_homer", should_not_run)
+    response = client.post("/chat", json={"message": "123456789"})
+
+    assert response.status_code == 422

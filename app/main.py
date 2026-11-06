@@ -26,13 +26,28 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(
         min_length=1,
-        max_length=2000,
+        max_length=20000,
         description="User message for HOMER",
     )
 
 
 class ChatResponse(BaseModel):
     reply: str
+
+
+class ChatSettingsResponse(BaseModel):
+    """Safe-to-display chat settings; never includes provider credentials."""
+
+    provider: str
+    model: str
+    temperature: float
+    top_p: float
+    max_output_tokens: int
+    timeout_seconds: float
+    max_retries: int
+    history_messages: int
+    max_message_chars: int
+    api_key_configured: bool
 
 
 class ScreenQuestion(BaseModel):
@@ -48,10 +63,30 @@ async def health() -> dict[str, str | bool]:
 
     return {
         "status": "ok",
-        "provider": "groq",
+        "provider": settings.llm_provider,
         "model": settings.groq_model,
         "api_key_configured": bool(settings.groq_api_key),
     }
+
+
+@app.get("/chat/settings", response_model=ChatSettingsResponse)
+async def chat_settings() -> ChatSettingsResponse:
+    """Return the active chat configuration without exposing secrets."""
+    settings = get_settings()
+    return ChatSettingsResponse(
+        provider=settings.llm_provider,
+        model=settings.groq_model,
+        temperature=settings.groq_temperature,
+        top_p=settings.groq_top_p,
+        max_output_tokens=settings.groq_max_output_tokens,
+        timeout_seconds=settings.groq_timeout_seconds,
+        max_retries=settings.groq_max_retries,
+        history_messages=settings.chat_history_messages,
+        max_message_chars=settings.max_message_chars,
+        api_key_configured=bool(
+            settings.groq_api_key and settings.groq_api_key != "replace_me"
+        ),
+    )
 
 
 @app.post("/chat/reset")
@@ -85,6 +120,13 @@ async def screen_ask(request: ScreenQuestion) -> ChatResponse:
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     message = request.message.strip()
+    settings = get_settings()
+
+    if len(message) > settings.max_message_chars:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Message cannot exceed {settings.max_message_chars} characters.",
+        )
 
     if not message:
         raise HTTPException(

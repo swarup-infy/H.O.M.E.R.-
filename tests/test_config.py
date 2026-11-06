@@ -52,6 +52,7 @@ def test_settings_defaults_are_safe_and_documented(monkeypatch) -> None:
         ("GROQ_TIMEOUT_SECONDS", "0", "between 1.0 and 300.0"),
         ("GROQ_MAX_RETRIES", "6", "between 0 and 5"),
         ("HOMER_CHAT_HISTORY_MESSAGES", "1", "between 2 and 100"),
+        ("HOMER_CHAT_HISTORY_MESSAGES", "11", "must be an even number"),
         ("HOMER_MAX_MESSAGE_CHARS", "20001", "between 1 and 20000"),
     ],
 )

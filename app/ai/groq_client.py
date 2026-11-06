@@ -13,8 +13,7 @@ from app.tools.registry import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
 
-# Keep only a small recent window so follow-up questions have context.
-_MAX_HISTORY_MESSAGES = 12
+# Conversation history is bounded by HOMER_CHAT_HISTORY_MESSAGES.
 _history: list[dict[str, Any]] = []
 _history_lock = asyncio.Lock()
 
@@ -117,7 +116,8 @@ async def _save_direct_history(user_message: str, reply: str) -> str:
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": reply},
         ])
-        del _history[:-_MAX_HISTORY_MESSAGES]
+        limit = get_settings().chat_history_messages
+        del _history[:-limit]
     return reply
 
 
@@ -153,7 +153,7 @@ async def clear_history() -> None:
 
 
 async def ask_homer(user_message: str) -> str:
-    """Send a message to Groq with bounded short-term conversation context."""
+    """Send a message to the configured Groq model with bounded chat context."""
     # Clear, explicitly requested computer actions must not depend on the LLM
     # deciding to call a tool. Run them locally and report the real tool result.
     direct = _direct_desktop_command(user_message)
@@ -169,7 +169,11 @@ async def ask_homer(user_message: str) -> str:
             "GROQ_API_KEY is missing. Copy .env.example to .env and add your key."
         )
 
-    client = AsyncGroq(api_key=settings.groq_api_key)
+    client = AsyncGroq(
+        api_key=settings.groq_api_key,
+        timeout=settings.groq_timeout_seconds,
+        max_retries=settings.groq_max_retries,
+    )
 
     async with _history_lock:
         history = list(_history)
@@ -185,8 +189,9 @@ async def ask_homer(user_message: str) -> str:
             messages=messages,
             tools=TOOL_DEFINITIONS,
             tool_choice="auto",
-            temperature=0.2,
-            max_completion_tokens=300,
+            temperature=settings.groq_temperature,
+            top_p=settings.groq_top_p,
+            max_completion_tokens=settings.groq_max_output_tokens,
         )
 
         response = first_response
@@ -232,8 +237,9 @@ async def ask_homer(user_message: str) -> str:
                 messages=messages,
                 tools=TOOL_DEFINITIONS,
                 tool_choice="auto",
-                temperature=0.2,
-                max_completion_tokens=400,
+                temperature=settings.groq_temperature,
+                top_p=settings.groq_top_p,
+                max_completion_tokens=settings.groq_max_output_tokens,
             )
         else:
             final_text = (
@@ -252,8 +258,9 @@ async def ask_homer(user_message: str) -> str:
                 messages=messages,
                 tools=TOOL_DEFINITIONS,
                 tool_choice="none",
-                temperature=0.2,
-                max_completion_tokens=400,
+                temperature=settings.groq_temperature,
+                top_p=settings.groq_top_p,
+                max_completion_tokens=settings.groq_max_output_tokens,
             )
             final_text = final_response.choices[0].message.content or json.dumps(last_tool_result)
         async with _history_lock:

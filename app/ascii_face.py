@@ -243,7 +243,7 @@ class AsciiHomerFace(QWidget):
     def _render(self) -> None:
         if self.current_state == "IDLE":
             # Hold the open-eye frame, then blink briefly every few seconds.
-            frame_index = 1 if self._frame_tick % 24 in (0, 1) else 0
+            frame_index = 1 if self._frame_tick % 30 in (25, 26) else 0
         elif self.current_state == "LISTENING":
             frame_index = (self._frame_tick // 3) % len(_FACE_FRAMES["LISTENING"])
         else:

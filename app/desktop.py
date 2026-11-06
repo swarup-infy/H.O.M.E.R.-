@@ -9,6 +9,8 @@ import httpx
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QTimer
 from PySide6.QtGui import QFont
+from app.ascii_face import AsciiHomerFace
+
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -391,6 +393,8 @@ class HomerWindow(QMainWindow):
 
         topbar_layout.addWidget(page_title)
         topbar_layout.addStretch()
+        self.face_widget = AsciiHomerFace(compact=True)
+        topbar_layout.addWidget(self.face_widget)
         topbar_layout.addWidget(self.connection_label)
 
         # Scrollable conversation
@@ -576,6 +580,7 @@ class HomerWindow(QMainWindow):
                 self.connection_label.setStyleSheet(
                     "color: #8de3b1;"
                 )
+                self.face_widget.set_state("IDLE")
                 self.set_status(
                     f"Connected to {data.get('provider', 'AI')}."
                 )
@@ -586,6 +591,7 @@ class HomerWindow(QMainWindow):
             self.show_api_offline()
 
     def show_api_offline(self):
+        self.face_widget.set_state("OFFLINE")
         self.connection_label.setText("● API offline")
         self.connection_label.setStyleSheet(
             "color: #ff8f9b;"
@@ -611,6 +617,7 @@ class HomerWindow(QMainWindow):
         self.message_input.setEnabled(False)
         self.send_button.setEnabled(False)
         self.set_status("HOMER is thinking...")
+        self.face_widget.set_state("THINKING")
 
         self.thread = QThread(self)
         self.worker = ChatWorker(message)
@@ -630,12 +637,20 @@ class HomerWindow(QMainWindow):
     @Slot(str)
     def handle_reply(self, reply: str):
         self.add_message("HOMER", reply)
+        self.face_widget.set_state("RESPONDING")
+        QTimer.singleShot(1800, lambda: self._reset_face_state("RESPONDING"))
         self.set_status("Response received.")
 
     @Slot(str)
     def handle_error(self, message: str):
         self.add_message("HOMER", message)
+        self.face_widget.set_state("ERROR")
+        QTimer.singleShot(2200, lambda: self._reset_face_state("ERROR"))
         self.set_status("The request could not be completed.")
+
+    def _reset_face_state(self, expected_state: str) -> None:
+        if self.face_widget.current_state == expected_state:
+            self.face_widget.set_state("IDLE")
 
     @Slot()
     def request_finished(self):

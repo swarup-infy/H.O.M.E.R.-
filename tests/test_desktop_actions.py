@@ -68,27 +68,25 @@ def test_unknown_computer_use_tool_is_rejected():
 
 
 
-def test_play_youtube_video_attempts_player_interaction():
+def test_play_youtube_video_uses_homer_browser():
     fake_ytdlp = MagicMock()
     fake_ytdlp.__enter__.return_value.extract_info.return_value = {
         "entries": [{"id": "test-video-id"}]
     }
     fake_module = SimpleNamespace(YoutubeDL=MagicMock(return_value=fake_ytdlp))
-    playback = {"ok": True, "method": "vision_coordinate", "target": "Play button"}
+    opened = {"ok": True, "url": "https://www.youtube.com/watch?v=test-video-id"}
+    playback = {"ok": True, "paused": False, "volume": 50}
 
     with (
         patch.dict("sys.modules", {"yt_dlp": fake_module}),
-        patch.object(registry.platform, "system", return_value="Windows"),
-        patch.object(registry.time, "sleep"),
-        patch.object(registry, "_navigate_existing_browser", return_value=True),
-        patch("app.tools.computer_use.click_screen_target", return_value=playback) as click,
+        patch("app.tools.browser_control.browser_action", side_effect=[opened, playback]) as browser,
     ):
         result = registry.execute_tool(
             "play_youtube_video", {"query": "Arijit Singh Kesariya"}
         )
 
     assert result["ok"] is True
-    assert result["url"] == "https://www.youtube.com/watch?v=test-video-id&autoplay=1"
-    assert result["playback_attempted"] is True
+    assert result["url"] == "https://www.youtube.com/watch?v=test-video-id"
     assert result["playback_action"] == playback
-    click.assert_called_once_with("Play")
+    browser.assert_any_call("navigate", url=result["url"])
+    browser.assert_any_call("play")

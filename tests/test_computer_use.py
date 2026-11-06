@@ -34,3 +34,27 @@ def test_named_window_close_dispatches_to_computer_use():
 def test_named_window_close_rejects_unsupported_application():
     result = registry.execute_tool("close_named_window", {"application": "powershell"})
     assert result["ok"] is False
+
+
+
+def test_screen_reading_is_windows_only(monkeypatch):
+    from app.tools import computer_use
+
+    monkeypatch.setattr(computer_use.platform, "system", lambda: "Linux")
+    result = computer_use.read_screen("What is visible?")
+    assert result["ok"] is False
+    assert "Windows only" in result["error"]
+
+
+def test_screen_reading_validates_question_before_capture(monkeypatch):
+    from app.tools import computer_use
+
+    monkeypatch.setattr(computer_use.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        computer_use,
+        "_capture_screenshot",
+        lambda: (_ for _ in ()).throw(AssertionError("must validate before capture")),
+    )
+    result = computer_use.read_screen(" ")
+    assert result["ok"] is False
+    assert "1-1,000 characters" in result["error"]

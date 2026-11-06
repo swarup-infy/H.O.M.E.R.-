@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "homer": {
+      "command": "D:\\Software\\HOMER-desktop\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "D:\\Software\\HOMER-desktop"
+    }
+  }
+}

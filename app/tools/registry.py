@@ -168,6 +168,83 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             },
         },
     }
+    {
+        "type": "function",
+        "function": {
+            "name": "read_screen",
+            "description": "Read the current desktop screenshot with the configured vision model. Only call after the user explicitly asks HOMER to read or describe the screen. The screenshot is sent to Groq and is not intentionally saved.",
+            "parameters": {"type": "object", "properties": {"question": {"type": "string", "maxLength": 1000}}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "launch_application",
+            "description": "Launch a known Windows app or an exact installed Start Menu shortcut by name; arbitrary commands and executable paths are rejected.",
+            "parameters": {"type": "object", "properties": {"application": {"type": "string", "minLength": 1, "maxLength": 80}}, "required": ["application"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_open_windows",
+            "description": "List visible top-level Windows windows and process names; does not read window contents.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "focus_open_window",
+            "description": "Focus one uniquely matching visible window by its title.",
+            "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_control",
+            "description": "Control HOMER's visible dedicated browser. Supports open, navigate, tabs, new_tab, select_tab, close_tab, snapshot, click_text, type_text, press_key, play, pause, toggle, stop, volume, volume_up, volume_down, seek. Navigation is HTTPS and domain-allowlisted. Does not access the user's normal Chrome profile.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["open", "navigate", "tabs", "new_tab", "select_tab", "close_tab", "snapshot", "click_text", "type_text", "press_key", "play", "pause", "toggle", "stop", "volume", "volume_up", "volume_down", "seek"]},
+                    "url": {"type": "string", "maxLength": 2048},
+                    "text": {"type": "string", "maxLength": 2000},
+                    "tab_index": {"type": "integer", "minimum": -1, "maximum": 50},
+                    "volume": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "seconds": {"type": "integer", "minimum": 0, "maximum": 86400},
+                },
+                "required": ["action"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_homer_browser",
+            "description": "Close only HOMER's dedicated browser window and profile; does not close the user's normal browser.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "close_window_by_title",
+            "description": "Send a normal close request to exactly one visible Windows window whose title matches the supplied text. Unsaved work may trigger a save prompt.",
+            "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "maximize_window",
+            "description": "Maximize one uniquely matching visible Windows window by title.",
+            "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
+        },
+    }
 ]
 
 
@@ -292,7 +369,7 @@ def _open_website(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def _play_youtube_video(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Resolve the first YouTube search result to a direct watch URL."""
+    """Resolve a YouTube result and open it in HOMER's dedicated browser."""
     if set(arguments) != {"query"}:
         return {"ok": False, "error": "Provide only a video or song query."}
     query = arguments.get("query")
@@ -308,30 +385,17 @@ def _play_youtube_video(arguments: dict[str, Any]) -> dict[str, Any]:
         first = next((item for item in (entries or []) if item), None)
         if not first or not first.get("id"):
             return {"ok": False, "error": "No matching YouTube video was found."}
-        # Request autoplay, then explicitly try to activate the visible player control.
-        # Browser autoplay policies vary, so the click result is reported separately.
-        url = "https://www.youtube.com/watch?v=" + first["id"] + "&autoplay=1"
-        reused = _navigate_existing_browser(url, "default")
-        if not reused:
-            opened = webbrowser.open(url, new=0)
-            if not opened:
-                return {"ok": False, "error": "Windows could not open the YouTube video."}
-        playback = {"ok": False, "error": "Playback click was not attempted on this platform."}
-        if platform.system() == "Windows":
-            time.sleep(2.5)
-            try:
-                from app.tools.computer_use import click_screen_target
-                playback = click_screen_target("Play")
-            except Exception as exc:
-                playback = {"ok": False, "error": "Playback interaction failed (" + type(exc).__name__ + ")."}
+        url = "https://www.youtube.com/watch?v=" + first["id"]
+        from app.tools.browser_control import browser_action
+        opened = browser_action("navigate", url=url)
+        if not opened.get("ok"):
+            return {"ok": False, "message": "Found the video, but HOMER could not open its browser tab.", "browser_result": opened}
+        playback = browser_action("play")
         return {
-            "ok": True,
-            "message": "Found and opened the matching YouTube video.",
-            "url": url,
-            "reused_window": reused,
-            "playback_attempted": platform.system() == "Windows",
+            "ok": True, "message": "Found and opened the matching YouTube video in HOMER's browser.",
+            "url": url, "reused_window": True, "playback_attempted": True,
             "playback_action": playback,
-            "note": "A successful click is not proof that audio is playing; check the player state."
+            "note": "A play request is not proof that playback started; check the returned player state.",
         }
     except Exception as exc:
         return {"ok": False, "error": "YouTube search/open failed (" + type(exc).__name__ + "). Install or update yt-dlp if needed."}
@@ -482,6 +546,53 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "inspect_screen accepts no arguments."}
         from app.tools.computer_use import inspect_screen
         return inspect_screen()
+    if name == "read_screen":
+        if set(arguments) - {"question"}:
+            return {"ok": False, "error": "read_screen accepts only an optional question."}
+        from app.tools.computer_use import read_screen
+        return read_screen(arguments.get("question", "Describe what is visible on my screen."))
+    if name == "launch_application":
+        if set(arguments) != {"application"}:
+            return {"ok": False, "error": "Provide one allowlisted application name."}
+        from app.tools.windows_control import launch_application
+        return launch_application(arguments["application"])
+    if name == "list_open_windows":
+        if arguments:
+            return {"ok": False, "error": "list_open_windows accepts no arguments."}
+        from app.tools.windows_control import list_windows
+        return list_windows()
+    if name == "maximize_window":
+        if set(arguments) != {"title"} or not isinstance(arguments.get("title"), str):
+            return {"ok": False, "error": "Provide one window title."}
+        from app.tools.windows_control import maximize_window
+        return maximize_window(arguments["title"])
+    if name == "close_window_by_title":
+        if set(arguments) != {"title"} or not isinstance(arguments.get("title"), str):
+            return {"ok": False, "error": "Provide one window title."}
+        from app.tools.windows_control import close_window_by_title
+        return close_window_by_title(arguments["title"])
+    if name == "focus_open_window":
+        if set(arguments) != {"title"} or not isinstance(arguments.get("title"), str):
+            return {"ok": False, "error": "Provide one window title."}
+        from app.tools.windows_control import focus_window
+        return focus_window(arguments["title"])
+    if name == "browser_control":
+        if set(arguments) - {"action", "url", "text", "tab_index", "volume", "seconds"} or "action" not in arguments:
+            return {"ok": False, "error": "Provide a browser action and only supported optional parameters."}
+        from app.tools.browser_control import browser_action
+        return browser_action(
+            action=arguments["action"],
+            url=arguments.get("url", ""),
+            text=arguments.get("text", ""),
+            tab_index=arguments.get("tab_index", -1),
+            volume=arguments.get("volume", 50),
+            seconds=arguments.get("seconds", 0),
+        )
+    if name == "close_homer_browser":
+        if arguments:
+            return {"ok": False, "error": "close_homer_browser accepts no arguments."}
+        from app.tools.browser_control import close_browser
+        return close_browser()
     if name == "click_screen_target":
         if set(arguments) != {"target"} or not isinstance(arguments.get("target"), str):
             return {"ok": False, "error": "Provide one target description."}

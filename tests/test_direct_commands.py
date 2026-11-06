@@ -64,3 +64,77 @@ def test_song_by_artist_phrase_removes_generic_song_words():
     assert groq_client._direct_desktop_command("Play a song by Arijit Singh") == (
         "play_youtube_video", {"query": "arijit singh"}
     )
+
+
+
+def test_read_screen_routes_to_explicit_vision_tool():
+    assert groq_client._direct_desktop_command("Read my screen and tell me what is open") == (
+        "read_screen", {"question": "Read my screen and tell me what is open"}
+    )
+
+
+def test_launch_calculator_routes_to_allowlisted_app():
+    assert groq_client._direct_desktop_command("Open calculator") == (
+        "launch_application", {"application": "calculator"}
+    )
+
+
+def test_browser_volume_up_routes_to_browser_media_control():
+    assert groq_client._direct_desktop_command("Turn the browser volume up") == (
+        "browser_control", {"action": "volume_up"}
+    )
+
+
+def test_pause_youtube_routes_to_browser_media_control():
+    assert groq_client._direct_desktop_command("Pause the YouTube video") == (
+        "browser_control", {"action": "pause"}
+    )
+
+
+def test_open_homer_browser_routes_to_browser_service():
+    assert groq_client._direct_desktop_command("Open the HOMER browser") == (
+        "browser_control", {"action": "open"}
+    )
+
+
+def test_open_youtube_uses_homer_browser():
+    assert groq_client._direct_desktop_command("Open YouTube") == (
+        "browser_control", {"action": "navigate", "url": "https://www.youtube.com/"}
+    )
+
+
+def test_next_browser_tab_uses_control_tab():
+    assert groq_client._direct_desktop_command("Switch to next tab") == (
+        "browser_control", {"action": "press_key", "text": "Control+Tab"}
+    )
+
+
+def test_close_window_by_title_routes_directly():
+    assert groq_client._direct_desktop_command("Close the window titled Untitled - Notepad") == (
+        "close_window_by_title", {"title": "Untitled - Notepad"}
+    )
+
+
+
+def test_play_generic_video_routes_to_browser_media():
+    assert groq_client._direct_desktop_command("Play the video") == (
+        "browser_control", {"action": "play"}
+    )
+
+
+def test_stop_video_routes_to_browser_media_stop():
+    assert groq_client._direct_desktop_command("Stop the video") == (
+        "browser_control", {"action": "stop"}
+    )
+
+
+def test_list_open_windows_routes_directly():
+    assert groq_client._direct_desktop_command("Show all open windows") == (
+        "list_open_windows", {}
+    )
+
+
+def test_maximize_window_by_title_routes_directly():
+    assert groq_client._direct_desktop_command("Maximize window titled HOMER") == (
+        "maximize_window", {"title": "HOMER"}
+    )

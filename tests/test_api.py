@@ -160,3 +160,13 @@ def test_knowledge_search_endpoint(monkeypatch) -> None:
 def test_knowledge_search_rejects_invalid_limit() -> None:
     response = client.get("/knowledge/search", params={"q": "RAG", "limit": 99})
     assert response.status_code == 422
+
+
+
+def test_streamable_http_mcp_endpoint_is_mounted():
+    mounted_paths = {
+        getattr(route, "path", None)
+        for route in main.app.routes
+    }
+    assert "/mcp" in mounted_paths
+    assert main.mcp_http_app is not None

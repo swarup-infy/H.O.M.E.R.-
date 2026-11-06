@@ -3,7 +3,7 @@
 import logging
 import base64
 import binascii
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -15,19 +15,22 @@ from app.ai.vision_client import ask_about_image
 from app.config import get_settings
 from app.jobs.routes import router as jobs_router
 from app.knowledge.store import index_knowledge_base, knowledge_status, search_knowledge
+from app.mcp_server import mcp as homer_mcp
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app):
-    """Build the local RAG index before the API begins accepting requests."""
-    try:
-        result = await run_in_threadpool(index_knowledge_base)
-        logger.info("HOMER knowledge index ready: %s", result)
-    except Exception:
-        logger.exception("HOMER could not complete the initial knowledge index")
-    yield
+    """Run the MCP session manager and prepare local RAG before serving requests."""
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(homer_mcp.session_manager.run())
+        try:
+            result = await run_in_threadpool(index_knowledge_base)
+            logger.info("HOMER knowledge index ready: %s", result)
+        except Exception:
+            logger.exception("HOMER could not complete the initial knowledge index")
+        yield
 
 
 app = FastAPI(
@@ -37,6 +40,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(jobs_router)
+# MCP runs in this same process and shares HOMER's browser/window services.
+mcp_http_app = homer_mcp.streamable_http_app(streamable_http_path="/")
+app.mount("/mcp", mcp_http_app)
 
 
 class ChatRequest(BaseModel):

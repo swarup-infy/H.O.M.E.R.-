@@ -4,11 +4,9 @@ Uses Windows UI Automation for named controls first, then a hosted vision model
 for coordinate grounding when UIA cannot expose the target. Runs only in response
 to an explicit user task; it does not execute shell commands or read credentials.
 Screenshot pixels are sent to Groq only for a requested visual click.
-"""UI Automation first, screenshot-grounded fallback for HOMER on Windows.
 
-Only runs after HOMER receives an explicit user task. Never executes shell commands
-or reads browser credentials. Screenshot pixels are sent to the configured Groq
-vision model only for a requested visual click.
+UI Automation is preferred, with screenshot-grounded fallback when needed.
+The feature is opt-in and never reads browser credentials.
 """
 from __future__ import annotations
 
@@ -478,49 +476,3 @@ def close_window(application: str) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Named window close failed")
         return {"ok": False, "error": "Could not close the requested window (" + type(exc).__name__ + ")."}
-        pyautogui.click(int(x), int(y))
-        return {"ok": True, "method": "vision", "target": target, "x": int(x), "y": int(y),
-                "message": "Clicked the visually located target. The resulting state still needs verification."}
-    except Exception as exc:
-        logger.exception("Visual screen click failed")
-        return {"ok": False, "method": "vision", "error": f"Visual click failed ({type(exc).__name__})."}
-
-
-def close_window(application: str) -> dict[str, Any]:
-    """Close a single top-level window by process or title without killing all tabs."""
-    error = _windows_only()
-    if error:
-        return error
-    try:
-        from pywinauto import Desktop
-        desktop = Desktop(backend="uia")
-        app = application.casefold().strip()
-        matches = []
-        for window in desktop.windows(visible_only=True):
-            try:
-                title = window.window_text() or ""
-                process_name = ""
-                try:
-                    import psutil
-                    process_name = psutil.Process(window.process_id()).name().casefold()
-                except Exception:
-                    pass
-                if app == "brave" and process_name == "brave.exe":
-                    matches.append(window)
-                elif app == "chrome" and process_name == "chrome.exe":
-                    matches.append(window)
-                elif app == "spotify" and (process_name == "spotify.exe" or "spotify" in title.casefold()):
-                    matches.append(window)
-                elif app == "notepad" and ("notepad" in process_name or "notepad" in title.casefold()):
-                    matches.append(window)
-                elif app == "youtube" and "youtube" in title.casefold():
-                    matches.append(window)
-            except Exception:
-                continue
-        if not matches:
-            return {"ok": False, "error": f"No visible {application.title()} window was found."}
-        matches[0].close()
-        return {"ok": True, "message": f"Sent a close request to one {application.title()} window."}
-    except Exception as exc:
-        logger.exception("Named window close failed")
-        return {"ok": False, "error": f"Could not close the requested window ({type(exc).__name__})."}

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -26,6 +27,7 @@ BLOCKED_CLICK_TERMS = {
     "sign out", "log out", "remove account",
 }
 _lock = threading.RLock()
+_browser_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="homer-browser")
 _playwright = None
 _context = None
 _pages: list[Any] = []
@@ -124,7 +126,7 @@ def _media_action(page, action: str, value: float | None = None) -> dict[str, An
     return result
 
 
-def browser_action(
+def _browser_action_impl(
     action: str,
     url: str = "",
     text: str = "",
@@ -233,7 +235,7 @@ def browser_action(
     return {"ok": False, "error": "Browser action was not completed."}
 
 
-def close_browser() -> dict[str, Any]:
+def _close_browser_impl() -> dict[str, Any]:
     """Close only HOMER's dedicated browser context."""
     global _playwright, _context, _pages, _active_index
     with _lock:
@@ -249,6 +251,26 @@ def close_browser() -> dict[str, Any]:
             return {"ok": True, "message": "Closed HOMER's dedicated browser."}
         except Exception as exc:
             return {"ok": False, "error": "Could not close HOMER's browser (" + type(exc).__name__ + ")."}
+
+
+
+def browser_action(
+    action: str,
+    url: str = "",
+    text: str = "",
+    tab_index: int = -1,
+    volume: int = 50,
+    seconds: int = 0,
+) -> dict[str, Any]:
+    """Serialize every Playwright operation onto one dedicated browser thread."""
+    return _browser_executor.submit(
+        _browser_action_impl, action, url, text, tab_index, volume, seconds
+    ).result()
+
+
+def close_browser() -> dict[str, Any]:
+    """Close the dedicated browser on the same thread that owns its Playwright runtime."""
+    return _browser_executor.submit(_close_browser_impl).result()
 
 
 def _reset_for_tests() -> None:

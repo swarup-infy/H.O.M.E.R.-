@@ -58,3 +58,18 @@ def test_media_controls_follow_the_selected_tab(monkeypatch):
 
     result = browser_control.browser_action("play")
     assert result == {"ok": True, "page": "second"}
+
+
+def test_playwright_calls_are_serialized_on_one_browser_thread(monkeypatch):
+    import threading
+
+    thread_ids = []
+    def fake_action(*_args):
+        thread_ids.append(threading.get_ident())
+        return {"ok": True}
+
+    monkeypatch.setattr(browser_control, "_browser_action_impl", fake_action)
+    assert browser_control.browser_action("tabs")["ok"] is True
+    assert browser_control.browser_action("tabs")["ok"] is True
+    assert len(set(thread_ids)) == 1
+    assert thread_ids[0] != threading.get_ident()

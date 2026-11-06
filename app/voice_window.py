@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ascii_face import AsciiHomerFace
+
 API_BASE_URL = os.getenv("HOMER_API_URL", "http://127.0.0.1:8000")
 
 
@@ -388,7 +390,10 @@ class VoiceTask(QObject):
                 self.state.emit("THINKING")
                 answer = self._ask(message)
                 self.reply.emit(answer)
-                self._speak(answer)
+                if self.speak_reply:
+                    self._speak(answer)
+                else:
+                    self.state.emit("RESPONDING")
         except httpx.ConnectError:
             self.error.emit("Cannot reach HOMER's API. Start the FastAPI server on 127.0.0.1:8000.")
         except httpx.TimeoutException:
@@ -570,8 +575,8 @@ class VoiceAssistantWindow(QMainWindow):
         layout.addWidget(self.state_label)
         layout.addStretch(1)
 
-        self.core = AnimatedHomerCore()
-        layout.addWidget(self.core, 8)
+        self.face = AsciiHomerFace()
+        layout.addWidget(self.face, 8)
 
         self.transcript_label = QLabel("")
         self.transcript_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -678,16 +683,19 @@ class VoiceAssistantWindow(QMainWindow):
 
     @Slot(str)
     def _set_state(self, state: str) -> None:
-        self.core.set_mode(state)
+        self.face.set_state(state)
         labels = {
             "READY": "H O M E R   /   STANDBY",
             "LISTENING": "H O M E R   /   LISTENING",
             "THINKING": "H O M E R   /   THINKING",
             "SPEAKING": "H O M E R   /   SPEAKING",
+            "RESPONDING": "H O M E R   /   RESPONDING",
+            "ERROR": "H O M E R   /   ATTENTION",
         }
         self.state_label.setText(labels.get(state, f"H O M E R   /   {state}"))
         color = {"READY": "#78dfff", "LISTENING": "#ff789f",
-                 "THINKING": "#b8a5ff", "SPEAKING": "#8df8d0"}.get(state, "#78dfff")
+                 "THINKING": "#b8a5ff", "RESPONDING": "#8df8d0",
+                 "SPEAKING": "#8df8d0", "ERROR": "#ff8f9b"}.get(state, "#78dfff")
         self.state_label.setStyleSheet(
             f"color: {color}; font-size: 11px; letter-spacing: 3px; padding: 8px;"
         )
@@ -703,7 +711,9 @@ class VoiceAssistantWindow(QMainWindow):
     @Slot(str)
     def _show_error(self, message: str) -> None:
         self.transcript_label.setText(message)
-        self._set_state("READY")
+        self._set_state("ERROR")
+        QTimer.singleShot(2200, lambda: self._set_state("READY")
+                          if self.face.current_state == "ERROR" else None)
 
     @Slot()
     def _task_finished(self) -> None:

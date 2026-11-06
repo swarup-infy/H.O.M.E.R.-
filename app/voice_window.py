@@ -416,15 +416,32 @@ class VoiceTask(QObject):
         recognizer.pause_threshold = 0.8
         return sr, recognizer
 
+    def _transcribe_audio(self, audio, recognizer, sr) -> str:
+        """Prefer local Whisper transcription, with online fallback only if unavailable."""
+        try:
+            from app.voice.transcriber import transcribe_audio_data
+            wav_data = audio.get_wav_data(convert_rate=16000, convert_width=2)
+            transcript = transcribe_audio_data(wav_data, language="en")
+            if transcript:
+                return transcript.strip()
+            raise sr.UnknownValueError()
+        except ImportError:
+            return recognizer.recognize_google(audio, language="en-IN").strip()
+        except Exception as exc:
+            from app.voice.transcriber import VoiceDependencyError
+            if isinstance(exc, VoiceDependencyError):
+                return recognizer.recognize_google(audio, language="en-IN").strip()
+            raise
+
     def _listen_once(self) -> str:
         sr, recognizer = self._recognizer()
         self.state.emit("LISTENING")
         try:
             with sr.Microphone() as source:
-                recognizer.adjust_for_ambient_noise(source, duration=0.4)
-                audio = recognizer.listen(source, timeout=8, phrase_time_limit=18)
+                recognizer.adjust_for_ambient_noise(source, duration=0.8)
+                audio = recognizer.listen(source, timeout=10, phrase_time_limit=25)
             self.state.emit("THINKING")
-            return recognizer.recognize_google(audio, language="en-IN").strip()
+            return self._transcribe_audio(audio, recognizer, sr)
         except sr.WaitTimeoutError as exc:
             raise RuntimeError("I didn't hear anything. Try again.") from exc
         except sr.UnknownValueError as exc:
@@ -468,15 +485,15 @@ class VoiceTask(QObject):
                 # listener during playback; this avoids competing microphone streams.
                 try:
                     with sr.Microphone() as source:
-                        recognizer.adjust_for_ambient_noise(source, duration=0.25)
-                        audio = recognizer.listen(source, timeout=1, phrase_time_limit=12)
+                        recognizer.adjust_for_ambient_noise(source, duration=0.6)
+                        audio = recognizer.listen(source, timeout=1, phrase_time_limit=25)
                 except sr.WaitTimeoutError:
                     continue
                 if self._stop_event.is_set():
                     break
                 self.state.emit("THINKING")
                 try:
-                    message = recognizer.recognize_google(audio, language="en-IN").strip()
+                    message = self._transcribe_audio(audio, recognizer, sr)
                 except sr.UnknownValueError:
                     self.state.emit("LISTENING")
                     continue

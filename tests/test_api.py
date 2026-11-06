@@ -128,3 +128,35 @@ def test_chat_enforces_configured_message_limit(monkeypatch) -> None:
     response = client.post("/chat", json={"message": "123456789"})
 
     assert response.status_code == 422
+
+
+def test_knowledge_status_endpoint(monkeypatch) -> None:
+    monkeypatch.setattr(main, "knowledge_status", lambda: {
+        "documents": 3, "chunks": 12, "document_directory": "local-documents"
+    })
+    response = client.get("/knowledge/status")
+    assert response.status_code == 200
+    assert response.json()["documents"] == 3
+    assert response.json()["chunks"] == 12
+
+
+def test_knowledge_search_endpoint(monkeypatch) -> None:
+    class FakeResult:
+        def as_dict(self):
+            return {"title": "guide.md", "source_type": "document", "chunk": "retrieved"}
+
+    def fake_search(query, limit):
+        assert query == "RAG"
+        assert limit == 2
+        return [FakeResult()]
+
+    monkeypatch.setattr(main, "search_knowledge", fake_search)
+    response = client.get("/knowledge/search", params={"q": "RAG", "limit": 2})
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert response.json()["results"][0]["title"] == "guide.md"
+
+
+def test_knowledge_search_rejects_invalid_limit() -> None:
+    response = client.get("/knowledge/search", params={"q": "RAG", "limit": 99})
+    assert response.status_code == 422

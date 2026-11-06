@@ -1,18 +1,9 @@
-# Voice input (optional)
+# HOMER voice input and output
 
-H.O.M.E.R. uses the [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-package for local speech-to-text. It does not alter the API-based Groq chat
-backend and is not loaded unless its functions are called.
+Install optional voice dependencies from the repository root using python -m pip install -r requirements-voice.txt.
 
-Install from the repository root:
+Live microphone capture uses SpeechRecognition/PyAudio. Captured audio is converted to 16 kHz mono WAV and transcribed locally with Faster-Whisper using CPU int8 inference and beam search. The default base model balances accuracy, latency, and memory use on an 8 GB RAM computer. First use downloads model weights; allow internet for that one-time download. Set HOMER_WHISPER_MODEL=small for slower, potentially more accurate results, or tiny for lower latency. Set HOMER_WHISPER_LANGUAGE=en for English, or leave it empty for auto-detection.
 
-```powershell
-pip install -r requirements-voice.txt
-```
+If Faster-Whisper is not installed, the live UI falls back to Google's online SpeechRecognition service. Audio is not sent to Google when the local model works.
 
-Use `transcribe_file(path, language="en")` with an existing supported audio
-file. Model loading is lazy. Defaults are CPU `int8`, beam size 1, and model
-`base`. The first use may download model weights. Set
-`HOMER_WHISPER_MODEL=tiny` for a smaller model or `base` for a potential
-accuracy improvement, and optionally `HOMER_WHISPER_THREADS=2` to limit CPU
-threads. Microphone capture remains the responsibility of a future UI layer.
+Speech output uses Windows SAPI via pyttsx3. HOMER_TTS_SPEED=1.50 is the default multiplier relative to HOMER's 165-WPM base rate (approximately 248 WPM). Allowed values are 0.75–2.00; perceived speed depends on the installed Windows voice.

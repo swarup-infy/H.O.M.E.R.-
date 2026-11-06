@@ -9,6 +9,8 @@ from typing import Any
 from groq import AsyncGroq
 
 from app.config import get_settings
+from app.knowledge.context import build_knowledge_context
+from app.knowledge.store import search_knowledge
 from app.tools.registry import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
@@ -177,8 +179,12 @@ async def ask_homer(user_message: str) -> str:
 
     async with _history_lock:
         history = list(_history)
+    # Retrieve local references before generation; only relevant excerpts are sent to Groq.
+    retrieved = search_knowledge(user_message, limit=5)
+    knowledge_context = build_knowledge_context(retrieved)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *([{"role": "system", "content": knowledge_context}] if knowledge_context else []),
         *history,
         {"role": "user", "content": user_message},
     ]

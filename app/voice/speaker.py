@@ -15,10 +15,13 @@ from dataclasses import dataclass, field
 
 import pyttsx3
 
+from app.voice.speech_settings import speech_rate
+
 logger = logging.getLogger(__name__)
 
 VOICE_NAME = "Microsoft David Desktop"
-SPEECH_RATE = 165
+SPEECH_BASE_RATE = 165
+SPEECH_RATE = speech_rate(SPEECH_BASE_RATE)
 VOLUME = 1.0
 SPEECH_TIMEOUT_SECONDS = 90.0
 

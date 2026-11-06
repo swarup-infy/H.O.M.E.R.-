@@ -4,6 +4,6 @@ SpeechRecognition>=3.10,<4
 PyAudio>=0.2.14,<1.0
 pyttsx3>=2.90,<3
 
-# Optional local CPU speech-to-text (not required for the current Google
-# SpeechRecognition-based microphone flow).
+# Local CPU speech-to-text for live microphone audio and existing recordings.
+# First use downloads the selected Whisper model weights.
 faster-whisper>=1.0,<2.0

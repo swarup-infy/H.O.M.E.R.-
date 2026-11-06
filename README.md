@@ -107,9 +107,13 @@ python -m app.desktop
 
 You can also open the API documentation at http://127.0.0.1:8000/docs and check http://127.0.0.1:8000/health. Keep the API bound to `127.0.0.1`; do not expose the development server to your network.
 
-## 7. Optional voice and gesture features
+## 7. Local RAG knowledge base
 
-- **Voice assistant:** install `requirements-voice.txt`, then open **Voice assistant** from the HOMER desktop sidebar. The current continuous-listening control is explicit and can be switched off. Speech recognition currently uses Google's online recognition service; the optional faster-whisper module is local CPU transcription for audio files and is not the live microphone backend.
+HOMER indexes supported project files and the local documents folder when the API starts. The default document folder is under the user's profile at .homer/knowledge/documents. Copy PDFs, DOCX, TXT, Markdown, CSV, or source files into that folder. Refresh with POST /knowledge/index; inspect using GET /knowledge/status and test retrieval using GET /knowledge/search?q=your-question. The local SQLite FTS5 index stays on this computer; only relevant excerpts are sent to Groq. This is a lightweight lexical retrieval pipeline, not a neural embedding/vector database.
+
+## 8. Optional voice and gesture features
+
+- **Voice assistant:** install requirements-voice.txt, then open Voice assistant from the HOMER desktop sidebar. Live microphone audio is transcribed locally with Faster-Whisper (CPU int8, default base model); Google recognition remains a compatibility fallback if Faster-Whisper is not installed. The first local model use downloads model weights. Set HOMER_WHISPER_MODEL=small for slower, potentially more accurate transcription, or keep base for a lighter 8 GB RAM setup. Spoken responses default to 1.50x speed; adjust HOMER_TTS_SPEED between 0.75 and 2.00.
 - **Gesture controls:** install `requirements-vision.txt`, then choose **Gesture controls**. Camera access starts only after you open the feature. Close its window to release the camera.
 - **Screen awareness:** choose **Ask about screen** and confirm before sharing the screenshot with your configured hosted vision model. Do not share screens containing passwords or sensitive information.
 

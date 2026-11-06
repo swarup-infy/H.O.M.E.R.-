@@ -716,8 +716,12 @@ class VoiceAssistantWindow(QMainWindow):
     def _show_error(self, message: str) -> None:
         self.transcript_label.setText(message)
         self._set_state("ERROR")
-        QTimer.singleShot(2200, lambda: self._set_state("READY")
-                          if self.face.current_state == "ERROR" else None)
+        QTimer.singleShot(2200, self._clear_error_state)
+
+    def _clear_error_state(self) -> None:
+        if self.face.current_state == "ERROR":
+            self._set_state("READY")
+            self.face.set_state("READY")
 
     @Slot()
     def _task_finished(self) -> None:

@@ -13,7 +13,11 @@ async def ask_about_image(prompt: str, image_data_url: str) -> str:
     settings = get_settings()
     if not settings.groq_api_key or settings.groq_api_key == "replace_me":
         raise RuntimeError("GROQ_API_KEY is missing.")
-    client = AsyncGroq(api_key=settings.groq_api_key)
+    client = AsyncGroq(
+        api_key=settings.groq_api_key,
+        timeout=settings.groq_timeout_seconds,
+        max_retries=settings.groq_max_retries,
+    )
     try:
         response = await client.chat.completions.create(
             model=settings.groq_vision_model,
@@ -35,8 +39,9 @@ async def ask_about_image(prompt: str, image_data_url: str) -> str:
                     ],
                 },
             ],
-            temperature=0.2,
-            max_completion_tokens=700,
+            temperature=settings.groq_temperature,
+            top_p=settings.groq_top_p,
+            max_completion_tokens=settings.groq_max_output_tokens,
         )
         return response.choices[0].message.content or "I couldn't read an answer from the vision model."
     except Exception as exc:

@@ -142,6 +142,8 @@ def browser_action(
     }
     if action not in valid_actions:
         return {"ok": False, "error": "Unsupported browser action."}
+    if action in {"navigate", "new_tab"} and not _allowed_url(url):
+        return {"ok": False, "error": "Only allowlisted HTTPS sites can be opened in HOMER's browser."}
     with _lock:
         try:
             if action == "tabs":

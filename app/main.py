@@ -65,7 +65,9 @@ async def health() -> dict[str, str | bool]:
         "status": "ok",
         "provider": settings.llm_provider,
         "model": settings.groq_model,
-        "api_key_configured": bool(settings.groq_api_key),
+        "api_key_configured": bool(
+            settings.groq_api_key and settings.groq_api_key != "replace_me"
+        ),
     }
 
 

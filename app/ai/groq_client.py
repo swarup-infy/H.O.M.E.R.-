@@ -197,6 +197,7 @@ async def ask_homer(user_message: str) -> str:
         response = first_response
         tool_steps = 0
         last_tool_result: dict[str, Any] | None = None
+        final_text: str | None = None
 
         # Permit a short, bounded sequence of tool calls for multi-step requests.
         # Every action still passes through the strict allowlist in registry.py.
@@ -241,18 +242,12 @@ async def ask_homer(user_message: str) -> str:
                 top_p=settings.groq_top_p,
                 max_completion_tokens=settings.groq_max_output_tokens,
             )
-        else:
-            final_text = (
-                "I completed the allowed actions for this request. "
-                "Ask me to continue if there are more steps."
-            )
-
         if tool_steps >= 4 and (response.choices[0].message.tool_calls or []):
             final_text = (
                 "I reached the four-action safety limit for one request. "
                 "Tell me to continue if you want the next steps."
             )
-        elif tool_steps and 'final_text' not in locals():
+        elif final_text is None:
             final_response = await client.chat.completions.create(
                 model=settings.groq_model,
                 messages=messages,
@@ -263,6 +258,8 @@ async def ask_homer(user_message: str) -> str:
                 max_completion_tokens=settings.groq_max_output_tokens,
             )
             final_text = final_response.choices[0].message.content or json.dumps(last_tool_result)
+        if final_text is None:
+            final_text = "I could not generate a response for that request."
         async with _history_lock:
             _history.extend([
                 {"role": "user", "content": user_message},

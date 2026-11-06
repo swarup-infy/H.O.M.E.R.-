@@ -683,6 +683,9 @@ class VoiceAssistantWindow(QMainWindow):
 
     @Slot(str)
     def _set_state(self, state: str) -> None:
+        # Keep an error visible briefly even when the worker immediately emits READY.
+        if state == "READY" and self.face.current_state == "ERROR":
+            return
         self.face.set_state(state)
         labels = {
             "READY": "H O M E R   /   STANDBY",
@@ -707,6 +710,7 @@ class VoiceAssistantWindow(QMainWindow):
     @Slot(str)
     def _show_reply(self, text: str) -> None:
         self.transcript_label.setText(text)
+        self._set_state("RESPONDING")
 
     @Slot(str)
     def _show_error(self, message: str) -> None:

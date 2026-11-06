@@ -170,3 +170,9 @@ def test_streamable_http_mcp_endpoint_is_mounted():
     }
     assert "/mcp" in mounted_paths
     assert main.mcp_http_app is not None
+
+
+def test_mcp_streamable_http_endpoint_starts_with_app_lifespan():
+    with TestClient(main.app) as lifespan_client:
+        response = lifespan_client.get("/mcp/")
+    assert response.status_code != 404

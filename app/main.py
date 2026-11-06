@@ -42,6 +42,7 @@ class ChatSettingsResponse(BaseModel):
     model: str
     temperature: float
     top_p: float
+    reasoning_effort: str
     max_output_tokens: int
     timeout_seconds: float
     max_retries: int
@@ -80,6 +81,7 @@ async def chat_settings() -> ChatSettingsResponse:
         model=settings.groq_model,
         temperature=settings.groq_temperature,
         top_p=settings.groq_top_p,
+        reasoning_effort=settings.groq_reasoning_effort,
         max_output_tokens=settings.groq_max_output_tokens,
         timeout_seconds=settings.groq_timeout_seconds,
         max_retries=settings.groq_max_retries,

@@ -55,8 +55,15 @@ class Settings:
             "GROQ_TOP_P", 1.0, minimum=0.0, maximum=1.0
         )
         self.groq_max_output_tokens = _read_int(
-            "GROQ_MAX_OUTPUT_TOKENS", 400, minimum=1, maximum=32768
+            "GROQ_MAX_OUTPUT_TOKENS", 2048, minimum=1, maximum=32768
         )
+        self.groq_reasoning_effort = os.getenv(
+            "GROQ_REASONING_EFFORT", "medium"
+        ).strip().lower()
+        if self.groq_reasoning_effort not in {"low", "medium", "high"}:
+            raise ValueError(
+                "GROQ_REASONING_EFFORT must be one of: low, medium, high."
+            )
         self.groq_timeout_seconds = _read_float(
             "GROQ_TIMEOUT_SECONDS", 45.0, minimum=1.0, maximum=300.0
         )

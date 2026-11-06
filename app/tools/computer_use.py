@@ -48,7 +48,6 @@ def inspect_screen() -> dict[str, Any]:
     if error:
         return error
     try:
-        import pyautogui
         from pywinauto import Desktop
         data_url, width, height = _capture_screenshot()
         del data_url  # Inspection tool returns only metadata/control labels, not image bytes.
@@ -190,8 +189,6 @@ def click_screen_target(target: str) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Visual screen click failed")
         return {"ok": False, "method": "vision", "error": "Visual click failed (" + type(exc).__name__ + ")."}
-    finally:
-        client.close()
 
 
 def close_window(application: str) -> dict[str, Any]:

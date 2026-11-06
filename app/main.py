@@ -3,6 +3,7 @@
 import logging
 import base64
 import binascii
+from contextlib import asynccontextmanager
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -18,10 +19,22 @@ from app.knowledge.store import index_knowledge_base, knowledge_status, search_k
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(_app):
+    """Build the local RAG index before the API begins accepting requests."""
+    try:
+        result = await run_in_threadpool(index_knowledge_base)
+        logger.info("HOMER knowledge index ready: %s", result)
+    except Exception:
+        logger.exception("HOMER could not complete the initial knowledge index")
+    yield
+
+
 app = FastAPI(
     title="HOMER API MVP",
-    description="API-first desktop assistant prototype with a single allowlisted action.",
-    version="0.1.0",
+    description="API-first desktop assistant prototype with local RAG and allowlisted desktop actions.",
+    version="0.2.0",
+    lifespan=lifespan,
 )
 app.include_router(jobs_router)
 
@@ -59,16 +72,6 @@ class ScreenQuestion(BaseModel):
     model_config = ConfigDict(extra="forbid")
     prompt: str = Field(min_length=1, max_length=1000)
     image_data_url: str = Field(min_length=1, max_length=8_000_000)
-
-
-@app.on_event("startup")
-async def build_local_knowledge_index() -> None:
-    """Prepare local project/document retrieval before serving chat requests."""
-    try:
-        result = await run_in_threadpool(index_knowledge_base)
-        logger.info("HOMER knowledge index ready: %s", result)
-    except Exception:
-        logger.exception("HOMER could not complete the initial knowledge index")
 
 
 @app.post("/knowledge/index")

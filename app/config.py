@@ -66,6 +66,8 @@ class Settings:
         self.chat_history_messages = _read_int(
             "HOMER_CHAT_HISTORY_MESSAGES", 12, minimum=2, maximum=100
         )
+        if self.chat_history_messages % 2:
+            raise ValueError("HOMER_CHAT_HISTORY_MESSAGES must be an even number.")
         self.max_message_chars = _read_int(
             "HOMER_MAX_MESSAGE_CHARS", 2000, minimum=1, maximum=20000
         )

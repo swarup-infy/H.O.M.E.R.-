@@ -268,7 +268,7 @@ async def ask_homer(user_message: str) -> str:
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": final_text},
             ])
-            del _history[:-_MAX_HISTORY_MESSAGES]
+            del _history[:-settings.chat_history_messages]
         return final_text
 
     except Exception as exc:

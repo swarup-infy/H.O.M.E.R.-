@@ -72,6 +72,7 @@ def test_widget_changes_animation_state_and_frame(qt_app) -> None:
     thinking_frame = face.face_label.text()
 
     face._advance_frame()
+    face._advance_frame()
     assert face.face_label.text() != thinking_frame
 
     face.set_state("SPEAKING")

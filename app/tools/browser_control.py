@@ -24,7 +24,10 @@ ALLOWED_DOMAINS = {
 BLOCKED_CLICK_TERMS = {
     "buy now", "place order", "delete account", "delete permanently",
     "send money", "transfer", "pay now", "purchase", "confirm payment",
-    "sign out", "log out", "remove account",
+    "sign out", "log out", "remove account", "submit", "send message",
+    "post", "upload", "delete", "unsubscribe", "subscribe", "checkout",
+    "sign in", "log in",
+    "change password", "reset password",
 }
 _lock = threading.RLock()
 _browser_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="homer-browser")
@@ -95,6 +98,35 @@ def _tabs() -> list[dict[str, Any]]:
         {"tab_index": i, "title": page.title()[:160], "url": page.url, "active": i == _active_index}
         for i, page in enumerate(_pages)
     ]
+
+
+def _active_field_is_sensitive(page) -> bool:
+    """Detect password, verification-code, and payment fields before typing/submitting."""
+    try:
+        info = page.evaluate(
+            """() => {
+              const el = document.activeElement;
+              const form = el && el.form;
+              const values = [
+                el?.type, el?.name, el?.id, el?.autocomplete,
+                el?.getAttribute?.('aria-label'), el?.getAttribute?.('placeholder'),
+                ...(form ? [...form.querySelectorAll('input')].map(x =>
+                  [x.type, x.name, x.id, x.autocomplete].join(' ')) : [])
+              ];
+              return values.filter(Boolean).join(' ').toLowerCase();
+            }"""
+        )
+        return any(
+            term in str(info).casefold()
+            for term in (
+                "password", "one-time-code", "otp", "verification", "email", "phone", "tel", "address", "username",
+                "cc-number", "cc-csc", "cc-exp", "credit-card",
+                "cardnumber", "security-code", "cvv", "secret", "api-key",
+            )
+        )
+    except Exception:
+        # Fail closed when the focused field cannot be inspected.
+        return True
 
 
 def _media_action(page, action: str, value: float | None = None) -> dict[str, Any]:
@@ -212,11 +244,15 @@ def _browser_action_impl(
             if action == "type_text":
                 if len(text) > 2000:
                     return {"ok": False, "error": "Text is limited to 2,000 characters per action."}
+                if _active_field_is_sensitive(page):
+                    return {"ok": False, "error": "For safety, HOMER will not type passwords, verification codes, or payment details. Enter those manually."}
                 page.keyboard.insert_text(text)
                 return {"ok": True, "typed_characters": len(text), "note": "Text was typed into the currently focused browser element; it was not submitted."}
             if action == "press_key":
                 if text not in {"Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Home", "End", "PageUp", "PageDown", "Control+L", "Control+T", "Control+W", "Control+Tab", "Control+Shift+Tab"}:
                     return {"ok": False, "error": "That browser key is not on HOMER's keyboard allowlist."}
+                if text == "Enter" and _active_field_is_sensitive(page):
+                    return {"ok": False, "error": "For safety, HOMER will not submit password, verification-code, or payment forms. Complete those manually."}
                 page.keyboard.press(text)
                 return {"ok": True, "key": text}
             if action in {"play", "pause", "toggle", "stop", "volume_up", "volume_down"}:

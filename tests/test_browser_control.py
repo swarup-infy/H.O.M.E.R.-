@@ -75,3 +75,26 @@ def test_playwright_calls_are_serialized_on_one_browser_thread(monkeypatch):
     assert browser_control.browser_action("tabs")["ok"] is True
     assert len(set(thread_ids)) == 1
     assert thread_ids[0] != threading.get_ident()
+
+
+def test_sensitive_browser_fields_are_never_auto_typed():
+    class FakePage:
+        def evaluate(self, _script):
+            return "password current-password"
+    assert browser_control._active_field_is_sensitive(FakePage()) is True
+
+
+def test_sensitive_browser_field_inspection_fails_closed():
+    class BrokenPage:
+        def evaluate(self, _script):
+            raise RuntimeError("page not ready")
+    assert browser_control._active_field_is_sensitive(BrokenPage()) is True
+
+
+def test_browser_blocks_submit_clicks(monkeypatch):
+    class FakePage:
+        pass
+    monkeypatch.setattr(browser_control, "_page", lambda _index: FakePage())
+    result = browser_control.browser_action("click_text", text="Submit")
+    assert result["ok"] is False
+    assert "manually" in result["error"]

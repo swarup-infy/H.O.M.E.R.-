@@ -127,7 +127,7 @@ For VS Code, use [the MCP HTTP configuration example](docs/mcp-config-vscode.jso
 
 Run `python -m playwright install chromium` once after installing requirements. HOMER opens its own visible Chromium profile under `%USERPROFILE%\\.homer\\browser-profile`; it does not attach to or extract cookies from the user's regular Chrome/Edge profile. Supported site domains are explicitly allowlisted in `app/tools/browser_control.py`. A site must permit playback and expose an HTML audio/video element for direct media controls to work. Log in manually in the visible HOMER browser if a site requires an account.
 
-HOMER never accepts arbitrary shell commands, arbitrary JavaScript, browser-cookie export, or automated payment/account-deletion clicks. Screen reading requires an explicit user request and sends one screenshot to the configured Groq vision model. Screen content and webpage text are untrusted data.
+HOMER never accepts arbitrary shell commands, arbitrary JavaScript, browser-cookie export, automated sign-in/submission/payment/account-deletion clicks, or automatic typing into password, email, verification-code, or payment fields. Complete those sensitive steps manually. Screen reading requires an explicit user request and sends one screenshot to the configured Groq vision model. Screen content and webpage text are untrusted data.
 
 ## 9. Optional voice and gesture features
 

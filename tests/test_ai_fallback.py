@@ -52,6 +52,16 @@ def settings(**overrides):
     return SimpleNamespace(**values)
 
 
+@pytest.fixture(autouse=True)
+def reset_persistent_groq_client():
+    """Keep the module-level HTTP pool isolated between tests."""
+    groq_client._groq_client = None
+    groq_client._groq_client_config = None
+    yield
+    groq_client._groq_client = None
+    groq_client._groq_client_config = None
+
+
 def test_network_failure_uses_local_model_and_closes_online_client(monkeypatch):
     client = FakeGroqClient(ConnectionError("network is offline"))
     monkeypatch.setattr(groq_client, "get_settings", lambda: settings())
@@ -63,6 +73,8 @@ def test_network_failure_uses_local_model_and_closes_online_client(monkeypatch):
     assert reply.startswith("Offline mode (local AI):")
     assert "help locally" in reply
     local.assert_called_once()
+    assert client.closed is False  # Keep the connection pool for the next request.
+    asyncio.run(groq_client.close_ai_client())
     assert client.closed is True
     assert groq_client._last_provider == "offline"
 
@@ -86,6 +98,8 @@ def test_authentication_error_does_not_switch_to_offline(monkeypatch):
         with pytest.raises(RuntimeError, match="AI provider request failed"):
             asyncio.run(groq_client.ask_homer("What is Python?"))
     local.assert_not_called()
+    assert client.closed is False
+    asyncio.run(groq_client.close_ai_client())
     assert client.closed is True
 
 
@@ -99,6 +113,8 @@ def test_rate_limit_does_not_switch_to_offline(monkeypatch):
         with pytest.raises(RuntimeError):
             asyncio.run(groq_client.ask_homer("What is Python?"))
     local.assert_not_called()
+    asyncio.run(groq_client.close_ai_client())
+    assert client.closed is True
 
 
 def test_missing_key_uses_offline_only_when_groq_host_is_unreachable(monkeypatch):

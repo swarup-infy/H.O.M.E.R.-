@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import platform
+from pathlib import Path
 from typing import Any
 
 
@@ -28,7 +29,7 @@ def system_status() -> dict[str, Any]:
             "memory_total_mb": round(memory.total / 1024 / 1024),
             "memory_available_mb": round(memory.available / 1024 / 1024),
             "memory_percent": memory.percent,
-            "disk_free_gb": round(psutil.disk_usage(str(__import__("pathlib").Path.home())).free / 1024**3, 1),
+            "disk_free_gb": round(psutil.disk_usage(str(Path.home())).free / 1024**3, 1),
         })
         battery = psutil.sensors_battery()
         if battery is not None:

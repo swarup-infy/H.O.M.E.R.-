@@ -893,6 +893,23 @@ class HomerWindow(QMainWindow):
         self.set_status("Ready when you are.")
 
 
+
+    def closeEvent(self, event):
+        """Stop only the API process this desktop instance started."""
+        if self.api_process is not None and self.api_process.poll() is None:
+            self.api_process.terminate()
+            try:
+                self.api_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.api_process.kill()
+                self.api_process.wait(timeout=2)
+        if self._api_log_handle is not None:
+            try:
+                self._api_log_handle.close()
+            except OSError:
+                pass
+        super().closeEvent(event)
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("HOMER")

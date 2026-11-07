@@ -19,6 +19,44 @@ logger = logging.getLogger(__name__)
 # Conversation history is bounded by HOMER_CHAT_HISTORY_MESSAGES.
 _history: list[dict[str, Any]] = []
 _history_lock = asyncio.Lock()
+_groq_client: AsyncGroq | None = None
+_groq_client_config: tuple[Any, ...] | None = None
+
+
+def _get_groq_client(settings) -> AsyncGroq:
+    """Reuse the async HTTP connection pool across chat turns."""
+    global _groq_client, _groq_client_config
+    config = (
+        settings.groq_api_key,
+        settings.groq_timeout_seconds,
+        settings.groq_max_retries,
+        getattr(settings, "offline_fallback_enabled", False),
+    )
+    if _groq_client is None or _groq_client_config != config:
+        if _groq_client is not None:
+            # Configuration is process-stable in normal use; close stale pools
+            # asynchronously via the event loop before replacing them.
+            old_client = _groq_client
+            asyncio.get_running_loop().create_task(old_client.close())
+        _groq_client = AsyncGroq(
+            api_key=settings.groq_api_key,
+            timeout=httpx.Timeout(
+                settings.groq_timeout_seconds,
+                connect=min(3.0, settings.groq_timeout_seconds),
+            ),
+            max_retries=0 if config[3] else settings.groq_max_retries,
+        )
+        _groq_client_config = config
+    return _groq_client
+
+
+async def close_ai_client() -> None:
+    """Release the persistent HTTP connection pool during application shutdown."""
+    global _groq_client, _groq_client_config
+    client, _groq_client = _groq_client, None
+    _groq_client_config = None
+    if client is not None:
+        await client.close()
 
 SYSTEM_PROMPT = """You are HOMER, a friendly, intelligent Windows desktop AI assistant.
 
@@ -85,7 +123,7 @@ async def _answer_offline(user_message: str, settings, reason: str) -> str:
 
     async with _history_lock:
         history = list(_history)
-    retrieved = search_knowledge(user_message, limit=4)
+    retrieved = await asyncio.to_thread(search_knowledge, user_message, limit=4)
     knowledge_context = build_knowledge_context(retrieved)
     answer = await asyncio.to_thread(
         generate_reply,
@@ -358,20 +396,12 @@ async def ask_homer(user_message: str) -> str:
             "GROQ_API_KEY is missing. Copy .env.example to .env and add your key."
         )
 
-    fallback_enabled = getattr(settings, "offline_fallback_enabled", False)
-    client = AsyncGroq(
-        api_key=settings.groq_api_key,
-        timeout=httpx.Timeout(
-            settings.groq_timeout_seconds,
-            connect=min(3.0, settings.groq_timeout_seconds),
-        ),
-        max_retries=0 if fallback_enabled else settings.groq_max_retries,
-    )
+    client = _get_groq_client(settings)
 
     async with _history_lock:
         history = list(_history)
     # Retrieve local references before generation; only relevant excerpts are sent to Groq.
-    retrieved = search_knowledge(user_message, limit=5)
+    retrieved = await asyncio.to_thread(search_knowledge, user_message, limit=5)
     knowledge_context = build_knowledge_context(retrieved)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": SYSTEM_PROMPT},

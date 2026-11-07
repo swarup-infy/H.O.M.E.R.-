@@ -40,7 +40,7 @@ HOMER_GLOBE_DIR=D:\\path\\to\\gods-eye-view.
 
 If startup fails, run npm run doctor in the globe folder and verify port 4173
 is free. HOMER reports missing dependencies, unsupported Node versions, and
-startup timeouts in its status bar.
+startup timeouts in its status bar. If Vite exits during startup, inspect `.homer-globe.log`.
 
 ## Data, privacy and safety
 

@@ -31,7 +31,7 @@ HOMER_GLOBE_DIR=D:\path\\to\\gods-eye-view.
 
 ## What HOMER verifies
 
-- URL is HTTP(S) and loopback-only; remote hosts and credential-bearing URLs
+- URL is HTTP and loopback-only; remote hosts and credential-bearing URLs
   are rejected.
 - Upstream checkout, package.json, dev script and node_modules exist.
 - Node version matches the upstream engine requirement.

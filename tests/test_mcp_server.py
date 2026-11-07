@@ -14,6 +14,7 @@ def test_registry_exposes_mcp_actions():
     assert {
         "read_screen", "launch_application", "list_open_windows",
         "focus_open_window", "maximize_window", "browser_control", "close_homer_browser",
+        "save_workspace_memory", "search_workspace_memory", "create_reminder", "get_system_status",
     }.issubset(names)
 
 

@@ -1,57 +1,78 @@
 # H.O.M.E.R. components and upstream attribution
 
-H.O.M.E.R. keeps its AI brain API-based: `app/ai/groq_client.py` sends
-requests to Groq. Speech transcription and gesture recognition are optional,
-separately installed components.
+HOMER is a native Windows desktop assistant with a FastAPI backend. Groq is
+the default hosted AI provider; a small optional GGUF model is used only when
+the online provider cannot be reached. Voice transcription, text-to-speech,
+and webcam gesture control are optional feature packs.
+
+## Active application components
+
+- `app/desktop.py` and `app/voice_window.py`: native PySide6 text and voice
+  interfaces.
+- `app/ai/groq_client.py`: online-first chat routing and local fallback.
+- `app/ai/offline_client.py`: optional CPU-only GGUF fallback.
+- `app/ai/vision_client.py` and `app/tools/computer_use.py`: explicit
+  screen-reading and visual UI targeting.
+- `app/knowledge/`: local SQLite FTS5 document and project search.
+- `app/mcp_server.py` and `app/tools/`: MCP tools for browser, windows,
+  audio, applications, screen and desktop context.
+- `app/voice/`: optional microphone transcription and Windows speech output.
+- `app/vision/mouse_control.py`: optional webcam air-mouse window.
+- `app/jobs/`: local job search links, skill-fit scoring and application
+  tracking exposed through the backend API.
+- `app/ascii_face.py` and `app/assets/homer_core.png`: desktop assistant
+  state and visual identity.
+
+Optional dependencies are kept in separate requirements files so users do
+not need to install the offline LLM, microphone stack, or webcam stack unless
+they use those features. Test-only tools belong in `requirements-dev.txt`,
+not the runtime requirements.
 
 ## Upstream projects reviewed
 
 - **Ari VoiceCommand** — https://github.com/DO0OG/Ari-VoiceCommand
-  - MIT License, copyright MAD_DOGGO. Reviewed as a Windows desktop assistant
-    architecture reference. H.O.M.E.R. does not vendor Ari's desktop code.
+  - MIT License, copyright MAD_DOGGO. Reviewed as an architecture reference;
+    HOMER does not vendor its desktop code.
 - **ALOS** — https://github.com/sandeepbollavaram/ALOS
   - MIT License, copyright Sandeep Kumar Bollavaram. Reviewed for modular
-    skills and CPU-oriented voice-input concepts. H.O.M.E.R. implements
-    small, self-contained adapters rather than copying ALOS modules with
-    their internal config/logger dependencies.
+    skills and CPU-oriented voice-input concepts; HOMER uses its own adapters.
 - **faster-whisper** — https://github.com/SYSTRAN/faster-whisper
-  - H.O.M.E.R. imports the installed package and does not vendor its source.
+  - Installed as a dependency; its source is not vendored.
 - **MediaPipe Samples** — https://github.com/google-ai-edge/mediapipe-samples
-  - Apache License 2.0. Reviewed for MediaPipe Tasks concepts. H.O.M.E.R.
-    imports the installed MediaPipe package, not the sample applications.
+  - Apache License 2.0. Reviewed for hand-tracking concepts; sample
+    applications are not vendored.
+- **God's Eye View** — https://github.com/bilawalsidhu/gods-eye-view
+  - HOMER can launch a separately installed local globe service. Its source
+    tree is not copied into this repository. Third-party data, imagery,
+    models, and feeds retain their own licenses and provider terms.
 
 Before redistributing upstream source code, fonts, assets, model files, or
-binaries, review the corresponding license. Models and assets can have terms
-that differ from the software package itself.
-
-
-- **God's Eye View** — https://github.com/bilawalsidhu/gods-eye-view
-  - MIT-licensed application source, reviewed as a geospatial visualization
-    reference. HOMER launches a separately installed local instance rather
-    than vendoring its large Cesium application. Third-party data, imagery,
-    models, and feeds retain their own licenses and provider terms.
+binaries, review the corresponding license. Model and asset terms may differ
+from the software package license.
 
 ## Resource-conscious defaults
 
-- Hosted Groq API for chat; no local LLM weights are required.
-- faster-whisper loads lazily and uses CPU `int8`, beam size 1.
-- MediaPipe is optional and never automatically starts a camera.
-- Optional dependency files keep the base API installation smaller.
-
-## Current scope
-
-This branch adds optional helper modules and docs. It does not yet provide a
-desktop GUI, microphone recording endpoint, TTS, continuous webcam loop, or
-automatic gesture-to-action mapping.
-
+- Groq handles normal online chat; the optional offline model is loaded only
+  when needed and uses CPU inference.
+- faster-whisper loads lazily and uses CPU int8 inference.
+- MediaPipe and camera access are optional and never start automatically.
+- The local SQLite knowledge index avoids a heavyweight vector database.
+- Keep optional dependency packs separate to reduce the default installation.
 
 ## Desktop UI automation research (reviewed, not vendored)
 
 - **screen-use** — https://github.com/tongriyaotxt/screen-use
-  - MIT-licensed Windows desktop automation with UI Automation tree matching, screenshot grounding, mouse/keyboard actions, and an observe-act-verify task loop. This is the closest architectural match for HOMER's goal of finding a visible Play button and clicking it. It can operate without a vision model for many accessible controls.
+  - MIT-licensed Windows desktop automation with UI Automation tree matching,
+    screenshot grounding, mouse/keyboard actions, and an observe-act-verify
+    task loop.
 - **WindowsAgent** — https://github.com/ibraheem-mustafa-dev/windowsagent
-  - MIT-licensed Windows UI Automation-first agent with a vision fallback. Useful for targeting named controls more reliably than guessed screen coordinates.
+  - Reviewed as an example of UI Automation-first targeting with a vision
+    fallback.
 - **pywinauto** — https://github.com/pywinauto/pywinauto
-  - BSD-3-Clause Python library for Windows UI Automation and native window/control access. A lighter building block for application-specific automation.
+  - BSD-3-Clause Python library used for Windows UI Automation and native
+    window/control access.
 
-These projects were researched as implementation references. Their code is not copied into HOMER by this commit. A robust screen agent should prefer UI Automation/accessibility names, use visual coordinate grounding only when needed, and verify the screen after every action. Full-screen access is powerful, so the user should remain able to approve sensitive actions and stop automation immediately.
+These projects were researched as implementation references. Their code is
+not copied into HOMER. Screen automation prefers accessible UI Automation
+controls and uses visual targeting only when needed. Sensitive actions remain
+blocked or require manual user completion.

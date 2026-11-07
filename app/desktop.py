@@ -567,8 +567,8 @@ class HomerWindow(QMainWindow):
         if self._globe_process is not None and self._globe_process.poll() is not None:
             self._globe_poll_timer.stop()
             self.set_status(
-                "God's Eye View stopped while starting. Check the globe project's "
-                "terminal/log output and run npm run doctor."
+                "God's Eye View stopped while starting. Check .homer-globe.log in the globe "
+                "project folder and run npm run doctor."
             )
             return
 

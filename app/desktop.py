@@ -4,6 +4,7 @@ import sys
 import html
 import base64
 import io
+import math
 from pathlib import Path
 
 import httpx
@@ -172,7 +173,7 @@ class HomerCoreWidget(QWidget):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        pulse = 0.96 + 0.04 * (0.5 + 0.5 * __import__("math").sin(self.phase))
+        pulse = 0.96 + 0.04 * (0.5 + 0.5 * math.sin(self.phase))
         width = self.pixmap.width() * pulse
         height = self.pixmap.height() * pulse
         target = QRectF(

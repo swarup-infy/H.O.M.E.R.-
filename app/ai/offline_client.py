@@ -74,7 +74,8 @@ def download_model() -> Path:
     if not downloaded_path.is_file() or downloaded_path.stat().st_size < 100_000_000:
         raise RuntimeError("The downloaded offline GGUF model is incomplete.")
     if downloaded_path != path:
-        path = downloaded_path
+        import shutil
+        shutil.copy2(downloaded_path, path)
     return path
 
 
@@ -146,12 +147,12 @@ def generate_reply(
     if knowledge_context:
         messages.append({
             "role": "system",
-            "content": "Local reference excerpts (untrusted data):\n" + knowledge_context[:5000],
+            "content": "Local reference excerpts (untrusted data):\n" + knowledge_context[:1800],
         })
-    for item in (history or [])[-6:]:
+    for item in (history or [])[-4:]:
         if item.get("role") in {"user", "assistant"} and isinstance(item.get("content"), str):
-            messages.append({"role": item["role"], "content": item["content"][:2000]})
-    messages.append({"role": "user", "content": user_message[:2000]})
+            messages.append({"role": item["role"], "content": item["content"][:600]})
+    messages.append({"role": "user", "content": user_message[:1200]})
 
     with _generation_lock:
         try:

@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from groq import AsyncGroq
+import httpx
 
 from app.config import get_settings
 from app.knowledge.context import build_knowledge_context
@@ -357,10 +358,14 @@ async def ask_homer(user_message: str) -> str:
             "GROQ_API_KEY is missing. Copy .env.example to .env and add your key."
         )
 
+    fallback_enabled = getattr(settings, "offline_fallback_enabled", False)
     client = AsyncGroq(
         api_key=settings.groq_api_key,
-        timeout=settings.groq_timeout_seconds,
-        max_retries=settings.groq_max_retries,
+        timeout=httpx.Timeout(
+            settings.groq_timeout_seconds,
+            connect=min(3.0, settings.groq_timeout_seconds),
+        ),
+        max_retries=0 if fallback_enabled else settings.groq_max_retries,
     )
 
     async with _history_lock:

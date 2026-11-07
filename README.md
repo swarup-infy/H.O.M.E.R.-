@@ -115,7 +115,7 @@ HOMER indexes supported project files and the local documents folder when the AP
 
 HOMER always tries Groq first. If the Groq API cannot be reached, times out, or returns a temporary server error, HOMER automatically switches that request to a small local model. When Groq is reachable again, the next request uses Groq automatically. Invalid API keys and authentication/permission errors are reported instead of silently switching providers. Rate-limit responses are also reported as online-provider errors.
 
-The offline fallback is **SmolLM2-360M-Instruct Q4_K_M** (a roughly 271 MB GGUF file), loaded through the CPU build of `llama-cpp-python`. It uses a 2,048-token context, two CPU threads by default, and zero GPU layers. It is deliberately small for low-memory computers. Expect simpler and less reliable answers than Groq; it is an English-focused helper, not a replacement for the online model. Offline mode does not call browser/computer tools or access cloud services. It can use HOMER's local SQLite knowledge index.
+The offline model is **SmolLM2-360M-Instruct Q4_K_M** (roughly 271 MB of GGUF weights), loaded through the CPU build of `llama-cpp-python`. It is deliberately small for 4 GB RAM-class computers; keep other applications closed if Windows reports low available memory. This model is a basic helper and is noticeably less capable than Groq. It uses a 2,048-token context, two CPU threads by default, and zero GPU layers. It is deliberately small for low-memory computers. Expect simpler and less reliable answers than Groq; it is an English-focused helper, not a replacement for the online model. Offline mode does not call browser/computer tools or access cloud services. It can use HOMER's local SQLite knowledge index.
 
 ### One-time offline setup (while internet is available)
 
@@ -133,9 +133,13 @@ python -m app.ai.offline_model --download
 
 The file is stored by default in `%USERPROFILE%\\.homer\\models`. The model must be downloaded before you disconnect from the internet; the fallback never tries to download weights while offline. To check readiness and the last provider used, open `http://127.0.0.1:8000/ai/status`.
 
-Optional settings in `.env`:
+Choose the routing mode in `.env`:
 
 ```dotenv
+# auto = Groq first, local model when Groq is unavailable or no key is configured
+# offline = never contact Groq; use only the downloaded local model
+# online = require Groq and never use the local model
+HOMER_AI_MODE=offline
 HOMER_OFFLINE_FALLBACK_ENABLED=true
 HOMER_OFFLINE_THREADS=2
 HOMER_OFFLINE_MAX_TOKENS=160
@@ -165,7 +169,7 @@ HOMER never accepts arbitrary shell commands, arbitrary JavaScript, browser-cook
 
 ## 10. Optional voice and gesture features
 
-- **Voice assistant:** install requirements-voice.txt, then open Voice assistant from the HOMER desktop sidebar. Live microphone audio is transcribed locally with Faster-Whisper (CPU int8, default base model); Google recognition remains a compatibility fallback if Faster-Whisper is not installed. For fully offline voice chat, install the voice pack and run a microphone transcription once while online so Whisper downloads its model weights before you disconnect. The first local model use downloads model weights. Set HOMER_WHISPER_MODEL=small for slower, potentially more accurate transcription, or keep base for a lighter 8 GB RAM setup. Spoken responses default to 1.50x speed; adjust HOMER_TTS_SPEED between 0.75 and 2.00.
+- **Voice assistant:** install requirements-voice.txt, then open Voice assistant from the HOMER desktop sidebar. Live microphone audio is transcribed locally with Faster-Whisper (CPU int8, default base model); Google recognition remains a compatibility fallback if Faster-Whisper is not installed. For fully offline voice chat, install the voice pack and run a microphone transcription once while online so Whisper downloads its model weights before you disconnect. The first local model use downloads model weights. Set HOMER_WHISPER_MODEL=small for slower, potentially more accurate transcription, or keep base for a lighter 8 GB RAM setup. Spoken responses default to 1.20x speed; adjust HOMER_TTS_SPEED between 0.75 and 2.00.
 - **Gesture controls:** install `requirements-vision.txt`, then choose **Gesture controls**. Camera access starts only after you open the feature. Close its window to release the camera.
 - **Screen awareness:** choose **Ask about screen** and confirm before sharing the screenshot with your configured hosted vision model. Do not share screens containing passwords or sensitive information.
 

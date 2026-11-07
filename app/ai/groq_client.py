@@ -521,5 +521,3 @@ async def ask_homer(user_message: str) -> str:
             "account access, and configured model ID."
         ) from exc
 
-    finally:
-        await client.close()

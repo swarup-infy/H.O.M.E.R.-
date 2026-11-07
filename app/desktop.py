@@ -1,5 +1,7 @@
 """HOMER native Windows desktop application."""
 
+import os
+import subprocess
 import sys
 import html
 import base64
@@ -193,6 +195,9 @@ class HomerWindow(QMainWindow):
 
         self.thread = None
         self.worker = None
+        self.api_process = None
+        self._api_log_handle = None
+        self._api_start_attempts = 0
         self.voice_window = None
         self.conversation_messages = []
 
@@ -337,6 +342,7 @@ class HomerWindow(QMainWindow):
             "for AI responses. How can I help you today?",
         )
 
+        self.start_api_server_if_needed()
         self.check_api()
 
     def build_ui(self):
@@ -585,6 +591,81 @@ class HomerWindow(QMainWindow):
 
     def set_status(self, text: str):
         self.status_label.setText(text)
+
+    def start_api_server_if_needed(self):
+        """Start the local FastAPI service automatically when it is not already running."""
+        try:
+            response = httpx.get(f"{API_BASE_URL}/health", timeout=0.7)
+            response.raise_for_status()
+            return
+        except httpx.HTTPError:
+            pass
+
+        if self.api_process is not None and self.api_process.poll() is None:
+            return
+
+        project_root = Path(__file__).resolve().parent.parent
+        log_dir = Path.home() / ".homer" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "api.log"
+
+        try:
+            self._api_log_handle = log_path.open("a", encoding="utf-8")
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            self.api_process = subprocess.Popen(
+                [
+                    sys.executable, "-m", "uvicorn", "app.main:app",
+                    "--host", "127.0.0.1", "--port", "8000",
+                ],
+                cwd=str(project_root),
+                env=os.environ.copy(),
+                stdin=subprocess.DEVNULL,
+                stdout=self._api_log_handle,
+                stderr=subprocess.STDOUT,
+                creationflags=creation_flags,
+            )
+            self._api_start_attempts = 0
+            self.set_status("Starting HOMER's local API service…")
+            QTimer.singleShot(700, self._poll_api_startup)
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.set_status(f"Could not start HOMER's API: {exc}")
+            self.add_message("HOMER", f"API startup failed. Check {log_path} for details.")
+
+    def _poll_api_startup(self):
+        """Wait briefly for Uvicorn readiness without freezing the desktop UI."""
+        self._api_start_attempts += 1
+        if self.api_process is not None and self.api_process.poll() is not None:
+            log_path = Path.home() / ".homer" / "logs" / "api.log"
+            self.show_api_offline()
+            self.add_message(
+                "HOMER",
+                f"The local API process stopped during startup. Check its log: {log_path}",
+            )
+            return
+
+        try:
+            response = httpx.get(f"{API_BASE_URL}/health", timeout=0.7)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("status") == "ok":
+                self.connection_label.setText("● API online")
+                self.connection_label.setStyleSheet("color: #8de3b1;")
+                self.core_widget.set_mode("IDLE")
+                self.set_status(f"Connected to {data.get('provider', 'AI')}.")
+                return
+        except httpx.HTTPError:
+            pass
+
+        if self._api_start_attempts < 30:
+            QTimer.singleShot(700, self._poll_api_startup)
+            return
+
+        self.show_api_offline()
+        log_path = Path.home() / ".homer" / "logs" / "api.log"
+        self.add_message(
+            "HOMER",
+            f"The local API did not become ready. Check {log_path} for the startup error.",
+        )
 
     def check_api(self):
         try:

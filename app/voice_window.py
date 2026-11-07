@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import math
 import os
 import sys
@@ -9,12 +10,13 @@ import threading
 from pathlib import Path
 
 import httpx
-from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot, Qt, QRectF
+from PySide6.QtCore import QObject, QPropertyAnimation, QThread, QTimer, Signal, Slot, Qt, QRectF
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -27,6 +29,65 @@ from PySide6.QtWidgets import (
 
 
 API_BASE_URL = os.getenv("HOMER_API_URL", "http://127.0.0.1:8000")
+
+
+class WordRevealLabel(QLabel):
+    """Reveal recognized speech and assistant replies one animated word at a time."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setTextFormat(Qt.TextFormat.RichText)
+        self.setWordWrap(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.setMinimumHeight(34)
+        self.setMaximumHeight(66)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setStyleSheet("color: #b9eaff; font-size: 11pt;")
+        self._words: list[str] = []
+        self._visible_words = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(82)
+        self._timer.timeout.connect(self._reveal_next)
+        self._opacity = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self._opacity)
+        self._animation = QPropertyAnimation(self._opacity, b"opacity", self)
+        self._animation.setDuration(150)
+
+    def reveal(self, text: str) -> None:
+        self._timer.stop()
+        self._animation.stop()
+        self._words = str(text).split()
+        self._visible_words = 0
+        self.setText("")
+        self._opacity.setOpacity(1.0)
+        if not self._words:
+            return
+        self._timer.start()
+        self._reveal_next()
+
+    def clear_text(self) -> None:
+        self._timer.stop()
+        self._animation.stop()
+        self._words = []
+        self._visible_words = 0
+        self.setText("")
+        self._opacity.setOpacity(1.0)
+
+    def _reveal_next(self) -> None:
+        if self._visible_words >= len(self._words):
+            self._timer.stop()
+            return
+        previous = " ".join(html.escape(word) for word in self._words[:self._visible_words])
+        current = html.escape(self._words[self._visible_words])
+        prefix = f"{previous} " if previous else ""
+        self.setText(f'{prefix}<span style="color:#ffffff; font-size:13pt; font-weight:700;">{current}</span>')
+        self._visible_words += 1
+        self._opacity.setOpacity(0.28)
+        self._animation.setStartValue(0.28)
+        self._animation.setEndValue(1.0)
+        self._animation.start()
+        if self._visible_words >= len(self._words):
+            self._timer.stop()
 
 
 class AnimatedHomerCore(QWidget):
@@ -309,7 +370,11 @@ class VoiceTask(QObject):
             raise RuntimeError("Install voice support: python -m pip install -r requirements-voice.txt") from exc
         recognizer = sr.Recognizer()
         recognizer.dynamic_energy_threshold = True
-        recognizer.pause_threshold = 0.8
+        recognizer.dynamic_energy_adjustment_damping = 0.15
+        recognizer.dynamic_energy_ratio = 1.5
+        recognizer.pause_threshold = 0.75
+        recognizer.phrase_threshold = 0.25
+        recognizer.non_speaking_duration = 0.5
         return sr, recognizer
 
     def _transcribe_audio(self, audio, recognizer, sr) -> str:
@@ -317,7 +382,7 @@ class VoiceTask(QObject):
         try:
             from app.voice.transcriber import transcribe_audio_data
             wav_data = audio.get_wav_data(convert_rate=16000, convert_width=2)
-            transcript = transcribe_audio_data(wav_data, language="en")
+            transcript = transcribe_audio_data(wav_data, language=None)
             if transcript:
                 return transcript.strip()
             raise sr.UnknownValueError()
@@ -334,7 +399,7 @@ class VoiceTask(QObject):
         self.state.emit("LISTENING")
         try:
             with sr.Microphone() as source:
-                recognizer.adjust_for_ambient_noise(source, duration=0.8)
+                recognizer.adjust_for_ambient_noise(source, duration=1.0)
                 audio = recognizer.listen(source, timeout=10, phrase_time_limit=25)
             self.state.emit("THINKING")
             return self._transcribe_audio(audio, recognizer, sr)
@@ -376,13 +441,14 @@ class VoiceTask(QObject):
         sr, recognizer = self._recognizer()
         self.state.emit("LISTENING")
         try:
+            # Calibrate once per session; repeated calibration can swallow first words.
+            with sr.Microphone() as calibration_source:
+                recognizer.adjust_for_ambient_noise(calibration_source, duration=1.0)
             while not self._stop_event.is_set():
-                # Close the command-listening microphone before opening the stop-word
-                # listener during playback; this avoids competing microphone streams.
+                # Release the microphone before TTS opens its optional stop listener.
                 try:
                     with sr.Microphone() as source:
-                        recognizer.adjust_for_ambient_noise(source, duration=0.6)
-                        audio = recognizer.listen(source, timeout=1, phrase_time_limit=25)
+                        audio = recognizer.listen(source, timeout=2, phrase_time_limit=20)
                 except sr.WaitTimeoutError:
                     continue
                 if self._stop_event.is_set():
@@ -491,13 +557,22 @@ class VoiceAssistantWindow(QMainWindow):
         self.core = AnimatedHomerCore()
         layout.addWidget(self.core, 8)
 
-        self.transcript_label = QLabel("")
-        self.transcript_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.transcript_label.setWordWrap(True)
-        self.transcript_label.setMaximumHeight(42)
-        self.transcript_label.setStyleSheet("color: #b9eaff; font-size: 12px;")
-        layout.addWidget(self.transcript_label)
-        layout.addStretch(1)
+        # Keep both sides of the conversation visible with word-by-word reveal.
+        text_stack = QVBoxLayout()
+        text_stack.setContentsMargins(34, 6, 34, 8)
+        text_stack.setSpacing(2)
+        user_heading = QLabel("YOU")
+        user_heading.setStyleSheet("color:#70cfff; font-size:9px; letter-spacing:2px;")
+        self.user_text_label = WordRevealLabel()
+        assistant_heading = QLabel("HOMER")
+        assistant_heading.setStyleSheet("color:#e9b65c; font-size:9px; letter-spacing:2px;")
+        self.assistant_text_label = WordRevealLabel()
+        text_stack.addWidget(user_heading)
+        text_stack.addWidget(self.user_text_label)
+        text_stack.addWidget(assistant_heading)
+        text_stack.addWidget(self.assistant_text_label)
+        layout.addLayout(text_stack)
+        self.transcript_label = self.assistant_text_label
 
         controls = QHBoxLayout()
         controls.setSpacing(26)
@@ -577,7 +652,7 @@ class VoiceAssistantWindow(QMainWindow):
 
     @Slot(str)
     def _on_mode_command(self, mode: str) -> None:
-        self.transcript_label.setText(f"Switching to {mode}…")
+        self.assistant_text_label.reveal(f"Switching to {mode}…")
         if self.worker is not None:
             self.worker.stop()
         self.mode_switch.emit(mode)
@@ -592,7 +667,8 @@ class VoiceAssistantWindow(QMainWindow):
             self._start_task("text", message)
 
     def clear_display(self) -> None:
-        self.transcript_label.clear()
+        self.user_text_label.clear_text()
+        self.assistant_text_label.clear_text()
 
     @Slot(str)
     def _set_state(self, state: str) -> None:
@@ -625,16 +701,16 @@ class VoiceAssistantWindow(QMainWindow):
 
     @Slot(str)
     def _show_transcript(self, text: str) -> None:
-        self.transcript_label.setText(text)
+        self.user_text_label.reveal(text)
 
     @Slot(str)
     def _show_reply(self, text: str) -> None:
-        self.transcript_label.setText(text)
+        self.assistant_text_label.reveal(text)
         self._set_state("RESPONDING")
 
     @Slot(str)
     def _show_error(self, message: str) -> None:
-        self.transcript_label.setText(message)
+        self.assistant_text_label.reveal(message)
         self._set_state("ERROR")
         QTimer.singleShot(2200, self._clear_error_state)
 

@@ -10,13 +10,13 @@ and opens the browser only after it is ready.
 Keep the upstream project beside HOMER (recommended) or set HOMER_GLOBE_DIR
 in HOMER's local .env file:
 
-\`\`\`powershell
+~~~powershell
 cd D:\\Software
 git clone https://github.com/bilawalsidhu/gods-eye-view.git
 cd gods-eye-view
 npm ci
 npm run doctor
-\`\`\`
+~~~
 
 The upstream project currently requires Node.js >=24.14 <25 or >=26 <27.
 Node 24.22.x is supported. HOMER does not install Node or run npm ci

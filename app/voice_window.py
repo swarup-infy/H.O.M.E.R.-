@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot, Qt, QRectF
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -49,6 +49,23 @@ class AnimatedHomerCore(QWidget):
         if not logo_path.is_file():
             logo_path = asset_dir / "homer_core.png"
         self.logo = QPixmap(str(logo_path))
+        self.scaled_logo = QPixmap()
+        self._refresh_scaled_logo()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_scaled_logo()
+
+    def _refresh_scaled_logo(self) -> None:
+        if self.logo.isNull():
+            self.scaled_logo = QPixmap()
+            return
+        side = max(1, int(min(self.width(), self.height()) * 0.70))
+        self.scaled_logo = self.logo.scaled(
+            side, side,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
 
     def set_mode(self, mode: str) -> None:
         self.mode = mode.upper()
@@ -118,8 +135,8 @@ class AnimatedHomerCore(QWidget):
                 painter.setPen(QPen(color, 2.0 if active else 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 painter.drawLine(int(x1), int(y1), int(x2), int(y2))
 
-        if not self.logo.isNull():
-            painter.drawPixmap(image_rect, self.logo, QRectF(self.logo.rect()))
+        if not self.scaled_logo.isNull():
+            painter.drawPixmap(image_rect, self.scaled_logo, QRectF(self.scaled_logo.rect()))
         else:
             painter.setPen(QPen(QColor("#57eaff"), 2))
             painter.setBrush(QColor(10, 25, 48, 220))
@@ -582,6 +599,9 @@ class VoiceAssistantWindow(QMainWindow):
         # Keep an error visible briefly even when the worker immediately emits READY.
         if state == "READY" and self.core.mode == "ERROR":
             return
+        if state == "READY" and self.core.mode == "RESPONDING":
+            QTimer.singleShot(1100, self._finish_response_visual)
+            return
         self.core.set_mode(state)
         labels = {
             "READY": "H O M E R   /   STANDBY",
@@ -598,6 +618,10 @@ class VoiceAssistantWindow(QMainWindow):
         self.state_label.setStyleSheet(
             f"color: {color}; font-size: 11px; letter-spacing: 3px; padding: 8px;"
         )
+
+    def _finish_response_visual(self) -> None:
+        if self.core.mode == "RESPONDING":
+            self._set_state("READY")
 
     @Slot(str)
     def _show_transcript(self, text: str) -> None:

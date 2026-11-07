@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.ascii_face import AsciiHomerFace
 
 API_BASE_URL = os.getenv("HOMER_API_URL", "http://127.0.0.1:8000")
 
@@ -40,7 +39,7 @@ class AnimatedHomerCore(QWidget):
         self.setMinimumSize(320, 320)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.timer = QTimer(self)
-        self.timer.setInterval(50)
+        self.timer.setInterval(80)
         self.timer.timeout.connect(self._tick)
         # Animate at a lighter idle cadence; use a faster cadence only when active.
         self.timer.start()
@@ -53,7 +52,7 @@ class AnimatedHomerCore(QWidget):
 
     def set_mode(self, mode: str) -> None:
         self.mode = mode.upper()
-        self.timer.setInterval(25 if self.mode in {"SPEAKING", "LISTENING"} else 50)
+        self.timer.setInterval(28 if self.mode in {"SPEAKING", "RESPONDING"} else 45 if self.mode == "LISTENING" else 80)
         self.update()
 
     def showEvent(self, event) -> None:
@@ -67,7 +66,7 @@ class AnimatedHomerCore(QWidget):
 
     @Slot()
     def _tick(self) -> None:
-        self.phase = (self.phase + (2.8 if self.mode == "SPEAKING" else 1.25)) % 360
+        self.phase = (self.phase + (4.0 if self.mode in {"SPEAKING", "RESPONDING"} else 2.2 if self.mode == "LISTENING" else 0.8)) % 360
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -76,202 +75,71 @@ class AnimatedHomerCore(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         w, h = self.width(), self.height()
-        # Deep midnight background with a restrained blue atmospheric glow.
-        background = QRadialGradient(w * 0.5, h * 0.43, max(w, h) * 0.78)
-        background.setColorAt(0.0, QColor("#0a1930"))
-        background.setColorAt(0.55, QColor("#050d1b"))
-        background.setColorAt(1.0, QColor("#01040b"))
-        painter.fillRect(self.rect(), background)
+        cx, cy = w / 2, h / 2 - 10
+        unit = min(w, h)
+        painter.fillRect(self.rect(), QColor("#02050b"))
+        active = self.mode in {"SPEAKING", "RESPONDING"}
+        listening = self.mode == "LISTENING"
 
-        # Very subtle star-grid gives depth without making the UI noisy.
-        painter.setPen(QPen(QColor(70, 160, 220, 18), 1))
-        grid_step = 48
-        for gx in range(0, w, grid_step):
-            painter.drawLine(gx, 0, gx, h)
-        for gy in range(0, h, grid_step):
-            painter.drawLine(0, gy, w, gy)
-
-        cx, cy = w / 2, h / 2 - 4
-        radius = min(w, h) * 0.34
-        pulse = 1.0 + 0.025 * math.sin(math.radians(self.phase * 2.0))
-        glow_radius = radius * 1.65 * pulse
-
-        glow = QRadialGradient(cx, cy, glow_radius)
-        glow.setColorAt(0.0, QColor(0, 176, 255, 48))
-        glow.setColorAt(0.48, QColor(0, 111, 255, 18))
-        glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+        halo_radius = unit * (0.47 if active else 0.43)
+        halo = QRadialGradient(cx, cy, halo_radius)
+        halo.setColorAt(0.0, QColor(0, 115, 255, 25))
+        halo.setColorAt(0.68, QColor(0, 80, 180, 12))
+        halo.setColorAt(1.0, QColor(0, 0, 0, 0))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(glow)
-        painter.drawEllipse(QRectF(cx - glow_radius, cy - glow_radius, glow_radius * 2, glow_radius * 2))
+        painter.setBrush(halo)
+        painter.drawEllipse(QRectF(cx-halo_radius, cy-halo_radius, halo_radius*2, halo_radius*2))
 
-        # Thin rotating orbital rings.
-        for index, factor in enumerate((1.0, 1.18, 1.38)):
-            ring_radius = radius * factor * pulse
-            hue = QColor("#42e8ff") if index != 1 else QColor("#8b7bff")
-            hue.setAlpha(170 if index == 0 else 100)
-            pen = QPen(hue, 1.4 if index == 0 else 1.0)
-            pen.setStyle(Qt.PenStyle.DashLine if index == 1 else Qt.PenStyle.SolidLine)
-            pen.setDashPattern([3.0, 7.0] if index == 1 else [1.0, 1.0])
-            painter.setPen(pen)
+        pulse = 1.0 + (0.012 if active else 0.004) * math.sin(self.phase * 0.8)
+        image_side = unit * 0.68 * pulse
+        image_rect = QRectF(cx-image_side/2, cy-image_side/2, image_side, image_side)
+
+        for factor, alpha in ((0.405, 65), (0.455, 35)):
+            radius = unit * factor
+            painter.setPen(QPen(QColor(38, 174, 255, alpha), 1.0))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.save()
-            painter.translate(cx, cy)
-            painter.rotate(self.phase * (1 if index % 2 == 0 else -0.65))
-            painter.drawEllipse(QRectF(-ring_radius, -ring_radius, ring_radius * 2, ring_radius * 2))
-            # Orbit nodes.
-            for angle in (0, 120, 240) if index == 0 else (45, 225):
-                painter.save()
-                painter.rotate(angle)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor("#b7faff") if index == 0 else QColor("#a79aff"))
-                painter.drawEllipse(QRectF(ring_radius - 3, -3, 6, 6))
-                painter.restore()
-            painter.restore()
+            painter.drawEllipse(QRectF(cx-radius, cy-radius, radius*2, radius*2))
 
-        # Subtle circuit traces extending away from the core.
-        trace_pen = QPen(QColor(42, 205, 255, 78), 1.2)
-        painter.setPen(trace_pen)
-        for direction in (-1, 1):
-            for offset in (0.0, 20.0, 40.0):
-                start_x = cx + direction * (radius * 1.05)
-                end_x = cx + direction * (radius * 1.65)
-                y = cy + offset - 20
-                path = QPainterPath()
-                path.moveTo(start_x, y)
-                path.lineTo(start_x + direction * 18, y)
-                path.lineTo(start_x + direction * 31, y + direction * 13)
-                path.lineTo(end_x, y + direction * 13)
-                painter.drawPath(path)
-                painter.setBrush(QColor("#43dfff"))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawEllipse(QRectF(end_x - 2, y + direction * 11, 4, 4))
-                painter.setPen(trace_pen)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
+        # A radial spectrum responds whenever HOMER answers or speaks.
+        if active or listening:
+            count = 72
+            base_radius = unit * 0.405
+            for i in range(count):
+                angle = (2 * math.pi * i / count) + self.phase * (0.10 if active else -0.035)
+                harmonic = (0.48 + 0.24 * math.sin(self.phase * 1.7 + i * 0.37)
+                            + 0.16 * math.sin(self.phase * 2.9 - i * 0.19)
+                            + 0.12 * math.sin(self.phase * 4.1 + i * 0.73))
+                envelope = max(0.08, min(1.0, harmonic))
+                length = unit * (0.018 + envelope * (0.055 if active else 0.022))
+                x1, y1 = cx + math.cos(angle)*base_radius, cy + math.sin(angle)*base_radius
+                x2, y2 = cx + math.cos(angle)*(base_radius+length), cy + math.sin(angle)*(base_radius+length)
+                alpha = int((175 if active else 95) * envelope)
+                color = QColor(65, 220, 255, alpha) if i % 4 else QColor(255, 190, 75, alpha)
+                painter.setPen(QPen(color, 2.0 if active else 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
 
-        # Electric arcs overlap the core while HOMER is speaking.
-        if self.mode in ("SPEAKING", "LISTENING"):
-            # Listening uses a restrained electric corona; speaking produces
-            # brighter, irregular pulses so the core feels alive rather than mechanical.
-            intensity = 1.0 if self.mode == "SPEAKING" else 0.34
-            for arc_index in range(9 if intensity == 1.0 else 5):
-                angle = self.phase * (1.4 + arc_index * 0.13) + arc_index * 47
-                arc_radius = radius * (0.43 + (arc_index % 4) * 0.14)
-                painter.save()
-                painter.translate(cx, cy)
-                painter.rotate(angle)
-                path = QPainterPath()
-                path.moveTo(arc_radius * 0.5, 0)
-                for step in range(1, 8):
-                    distance = arc_radius * (0.5 + step * 0.075)
-                    jitter = math.sin(math.radians(self.phase * 5 + arc_index * 67 + step * 53)) * radius * 0.08
-                    path.lineTo(distance, jitter)
-                painter.setPen(QPen(QColor(90, 238, 255, int(220 * intensity)), 1.2 + intensity))
-                painter.drawPath(path)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(180, 250, 255, int(230 * intensity)))
-                painter.drawEllipse(QRectF(arc_radius * 1.06 - 2, -2, 4, 4))
-                painter.restore()
-
-            # Lightning is asymmetric and intermittent-looking: fewer, sharper
-            # branches while listening, fuller flashes while HOMER speaks.
-            bolt_count = 12 if self.mode == "SPEAKING" else 5
-            bolt_intensity = 1.0 if self.mode == "SPEAKING" else 0.36
-            for bolt in range(bolt_count):
-                angle = math.radians(bolt * (360 / bolt_count) + self.phase * (2.8 if bolt_intensity == 1.0 else -0.8))
-                inner = radius * (0.18 + 0.09 * (bolt % 3))
-                outer = radius * ((0.50 + 0.12 * (bolt % 2)) if bolt_intensity == 1.0 else 0.43)
-                x1, y1 = cx + math.cos(angle) * inner, cy + math.sin(angle) * inner
-                x2, y2 = cx + math.cos(angle) * outer, cy + math.sin(angle) * outer
-                bolt_path = QPainterPath()
-                bolt_path.moveTo(x1, y1)
-                for segment in range(1, 5):
-                    t = segment / 5
-                    # Multiple harmonics create uneven, branching-looking arcs.
-                    jitter_x = math.sin(math.radians(self.phase * 7 + bolt * 31 + segment * 83))
-                    jitter_y = math.cos(math.radians(self.phase * 6 + bolt * 43 + segment * 61))
-                    bx = x1 + (x2 - x1) * t + jitter_x * radius * 0.075
-                    by = y1 + (y2 - y1) * t + jitter_y * radius * 0.075
-                    bolt_path.lineTo(bx, by)
-                    if segment == 2 and bolt_intensity > 0.8 and bolt % 3 == 0:
-                        bolt_path.lineTo(
-                            bx + math.cos(angle + 0.7) * radius * 0.12,
-                            by + math.sin(angle + 0.7) * radius * 0.12,
-                        )
-                        bolt_path.lineTo(bx, by)
-                bolt_path.lineTo(x2, y2)
-                glow_alpha = int(110 * bolt_intensity)
-                core_alpha = int(235 * bolt_intensity)
-                painter.setPen(QPen(QColor(0, 130, 255, glow_alpha), 5 if bolt_intensity > 0.8 else 2.5))
-                painter.drawPath(bolt_path)
-                painter.setPen(QPen(QColor(175, 250, 255, core_alpha), 1.5 if bolt_intensity > 0.8 else 0.9))
-                painter.drawPath(bolt_path)
-
-        # Logo is kept crisp and contained inside the innermost ring.
-        logo_size = radius * 1.42
-        logo_rect = QRectF(cx - logo_size / 2, cy - logo_size / 2, logo_size, logo_size)
         if not self.logo.isNull():
-            pixmap = self.logo.scaled(
-                int(logo_size), int(logo_size),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            painter.drawPixmap(
-                int(cx - pixmap.width() / 2),
-                int(cy - pixmap.height() / 2),
-                pixmap,
-            )
+            painter.drawPixmap(image_rect, self.logo, QRectF(self.logo.rect()))
         else:
             painter.setPen(QPen(QColor("#57eaff"), 2))
             painter.setBrush(QColor(10, 25, 48, 220))
-            painter.drawEllipse(logo_rect)
+            painter.drawEllipse(image_rect)
             painter.setPen(QColor("#b9f8ff"))
-            painter.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
-            painter.drawText(logo_rect, Qt.AlignmentFlag.AlignCenter, "H")
+            painter.setFont(QFont("Segoe UI", 30, QFont.Weight.Bold))
+            painter.drawText(image_rect, Qt.AlignmentFlag.AlignCenter, "H")
 
-        # Moving waveform bars below the core.
-        bar_y = min(h - 24, cy + radius * 1.62)
-        for i in range(31):
-            x = cx - 93 + i * 6.2
-            wave = abs(math.sin(math.radians(self.phase * 2 + i * 13)))
-            height = 3 + wave * (8 if self.mode == "LISTENING" else 5)
-            color = QColor("#55e9ff")
-            color.setAlpha(210 - int(abs(15 - i) * 5))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(color)
-            painter.drawRoundedRect(QRectF(x, bar_y - height / 2, 3, height), 1.5, 1.5)
-
-        # Animated starfield and holographic floor rings fill the widescreen scene.
-        for i in range(58):
-            seed_x = (i * 137.5) % max(1, w)
-            seed_y = (i * 83.7) % max(1, h)
-            drift = (self.phase * (0.16 + (i % 4) * 0.07))
-            px = (seed_x + drift * (1 if i % 2 else -1)) % max(1, w)
-            py = (seed_y + math.sin(math.radians(self.phase + i * 19)) * 9) % max(1, h)
-            alpha = 70 + int(100 * abs(math.sin(math.radians(self.phase * 1.7 + i * 23))))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(45, 198, 255, alpha))
-            size = 1.2 + (i % 3) * 0.55
-            painter.drawEllipse(QRectF(px, py, size, size))
-
-        floor_y = h * 0.83
-        painter.save()
-        painter.translate(cx, floor_y)
-        for i in range(7):
-            floor_width = min(w * 0.82, radius * (2.7 + i * 0.48))
-            floor_height = 12 + i * 5
-            floor_color = QColor("#19cfff" if i % 2 == 0 else "#e9a94b")
-            floor_color.setAlpha(max(24, 95 - i * 9))
-            painter.setPen(QPen(floor_color, 1.0))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(QRectF(-floor_width / 2, -floor_height / 2, floor_width, floor_height))
-        painter.restore()
-
-        # A softly animated scanning beam sweeps through the core.
-        scan_y = cy - radius + (2 * radius) * ((self.phase % 180) / 180.0)
-        scan_color = QColor(50, 225, 255, 34)
-        painter.setPen(QPen(scan_color, 2.0))
-        painter.drawLine(int(cx - radius * 0.88), int(scan_y), int(cx + radius * 0.88), int(scan_y))
-
+        if active or listening:
+            baseline = min(h - 24, cy + unit * 0.43)
+            bar_count, spacing = 50, min(8.0, max(3.0, w / 110))
+            bar_width, total = min(5.0, max(2.0, w / 180)), (bar_count - 1) * spacing
+            for i in range(bar_count):
+                wave = (0.18 + 0.42 * abs(math.sin(self.phase * 1.9 + i * 0.31))
+                        + 0.28 * abs(math.sin(self.phase * 3.1 - i * 0.17)))
+                bar_height = unit * (0.008 + wave * (0.035 if active else 0.014))
+                x = cx - total/2 + i*spacing
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(75, 218, 255, 190 if active else 110))
+                painter.drawRoundedRect(QRectF(x, baseline-bar_height/2, bar_width, bar_height), bar_width/2, bar_width/2)
         painter.end()
 
 
@@ -603,8 +471,8 @@ class VoiceAssistantWindow(QMainWindow):
         layout.addWidget(self.state_label)
         layout.addStretch(1)
 
-        self.face = AsciiHomerFace()
-        layout.addWidget(self.face, 8)
+        self.core = AnimatedHomerCore()
+        layout.addWidget(self.core, 8)
 
         self.transcript_label = QLabel("")
         self.transcript_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -712,9 +580,9 @@ class VoiceAssistantWindow(QMainWindow):
     @Slot(str)
     def _set_state(self, state: str) -> None:
         # Keep an error visible briefly even when the worker immediately emits READY.
-        if state == "READY" and self.face.current_state == "ERROR":
+        if state == "READY" and self.core.mode == "ERROR":
             return
-        self.face.set_state(state)
+        self.core.set_mode(state)
         labels = {
             "READY": "H O M E R   /   STANDBY",
             "LISTENING": "H O M E R   /   LISTENING",
@@ -747,8 +615,8 @@ class VoiceAssistantWindow(QMainWindow):
         QTimer.singleShot(2200, self._clear_error_state)
 
     def _clear_error_state(self) -> None:
-        if self.face.current_state == "ERROR":
-            self.face.set_state("READY")
+        if self.core.mode == "ERROR":
+            self.core.set_mode("READY")
             self._set_state("READY")
 
     @Slot()

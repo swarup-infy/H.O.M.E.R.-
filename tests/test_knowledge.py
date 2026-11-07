@@ -71,10 +71,10 @@ def test_context_marks_sources_as_untrusted_and_citable(tmp_path):
     assert "SQLite FTS5" in context
 
 
-def test_speech_speed_defaults_to_one_point_five(monkeypatch):
+def test_speech_speed_defaults_to_one_point_two(monkeypatch):
     monkeypatch.delenv("HOMER_TTS_SPEED", raising=False)
-    assert speech_speed() == 1.5
-    assert speech_rate() == 248
+    assert speech_speed() == 1.2
+    assert speech_rate() == 198
 
 
 def test_speech_speed_is_configurable_and_validated(monkeypatch):

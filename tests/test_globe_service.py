@@ -145,6 +145,7 @@ def test_start_globe_service_uses_loopback_and_strict_port(tmp_path):
     assert calls["kwargs"]["shell"] is False
     assert calls["kwargs"]["cwd"] == str(tmp_path)
     assert calls["kwargs"]["env"]["BROWSER"] == "none"
+    assert calls["kwargs"]["stdout"].name.endswith(".homer-globe.log")
 
 
 def test_start_globe_service_rejects_unsupported_node(tmp_path):
@@ -166,4 +167,60 @@ def test_start_globe_service_rejects_missing_npm(tmp_path):
     with pytest.raises(RuntimeError, match="Node.js and npm"):
         globe_service.start_globe_service(
             tmp_path, 4173, which=lambda name: None
+        )
+
+
+def test_start_globe_service_uses_node_to_run_npm_cli_on_windows(tmp_path):
+    npm_cmd = tmp_path / "npm.cmd"
+    npm_cmd.write_text("@echo off", encoding="utf-8")
+    npm_cli = tmp_path / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    npm_cli.parent.mkdir(parents=True)
+    npm_cli.write_text("// npm cli", encoding="utf-8")
+    calls = {}
+
+    class Completed:
+        returncode = 0
+        stdout = "v24.22.1"
+        stderr = ""
+
+    def fake_popen(command, **kwargs):
+        calls["command"] = command
+        return "process"
+
+    def fake_which(name):
+        if name == "npm.cmd":
+            return str(npm_cmd)
+        if name == "node":
+            return "C:/node/node.exe"
+        return None
+
+    result = globe_service.start_globe_service(
+        tmp_path, 4173, which=fake_which,
+        run=lambda *a, **k: Completed(),
+        popen=fake_popen, windows=True,
+    )
+    assert result == "process"
+    assert calls["command"][:2] == [
+        "C:/node/node.exe", str(npm_cli.resolve())
+    ]
+
+
+def test_start_globe_service_rejects_missing_windows_npm_cli(tmp_path):
+    npm_cmd = tmp_path / "npm.cmd"
+    npm_cmd.write_text("@echo off", encoding="utf-8")
+
+    class Completed:
+        returncode = 0
+        stdout = "v24.22.1"
+        stderr = ""
+
+    def fake_which(name):
+        return str(npm_cmd) if name == "npm.cmd" else "node"
+
+    with pytest.raises(RuntimeError, match="npm-cli.js"):
+        globe_service.start_globe_service(
+            tmp_path, 4173, which=fake_which,
+            run=lambda *a, **k: Completed(),
+            popen=lambda *a, **k: pytest.fail("server must not start"),
+            windows=True,
         )

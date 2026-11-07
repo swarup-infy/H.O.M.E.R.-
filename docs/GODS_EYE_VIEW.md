@@ -1,39 +1,61 @@
-# God's Eye View integration notes
+# God's Eye View integration
 
-HOMER exposes a **God's Eye View** workspace launcher in the desktop sidebar. It opens a separately installed local globe service in the system browser. The default URL is `http://127.0.0.1:4173`; override it with `HOMER_GLOBE_URL` in the local `.env` file. The launcher accepts localhost URLs only.
+HOMER integrates the upstream **God's Eye View** JavaScript/Cesium application as a
+separate local workspace. The desktop sidebar launcher checks whether the local
+service is already running, starts it when needed, waits for its HTTP response,
+and opens the browser only after it is ready.
 
-## Install the upstream globe separately
+## Install once
 
-The upstream project is a standalone JavaScript/Cesium application, not a Python package or a drop-in PySide6 widget. Keep it in a sibling folder rather than copying its large source tree into HOMER:
+Keep the upstream project beside HOMER (recommended) or set HOMER_GLOBE_DIR
+in HOMER's local .env file:
 
-```powershell
+~~~powershell
 cd D:\Software
 git clone https://github.com/bilawalsidhu/gods-eye-view.git
 cd gods-eye-view
 npm ci
 npm run doctor
-npm run dev
-```
+~~~
 
-Open HOMER and choose **God's Eye View** from the sidebar. Start the globe service first. The upstream project documents Node.js 24.14+ (24.x) or 26.x and serves the local app on port 4173 by default. Use a normal hardware-accelerated browser if an embedded browser view is slow.
+The upstream project currently requires Node.js >=24.14 <25 or >=26 <27.
+Node 24.22.x is supported. HOMER does not install Node or run npm ci
+automatically; dependency installation is a one-time setup step.
 
-## Planned HOMER integration phases
+After installation, start HOMER normally and click **God's Eye View**. HOMER
+starts the local Vite server bound to 127.0.0.1 on port 4173 by default,
+waits up to 30 seconds, and opens the globe when it responds. If the service is
+already running, HOMER reuses it. If you use another local port, set
+`HOMER_GLOBE_URL=http://127.0.0.1:PORT`. If the checkout is elsewhere, set
+HOMER_GLOBE_DIR=D:\path\\to\\gods-eye-view.
 
-1. Launch and status-check the local globe service.
-2. Add an explicit bridge between HOMER voice commands and a narrow set of map actions (search a place, reset globe, toggle approved layers, track a public asset).
-3. Add a curated layer selector and metadata cards.
-4. Consider deeper native embedding only after desktop performance and browser-engine support are measured.
+## What HOMER verifies
 
-## Important limitations and safety
+- URL is HTTP and loopback-only; remote hosts and credential-bearing URLs
+  are rejected.
+- Upstream checkout, package.json, dev script and node_modules exist.
+- Node version matches the upstream engine requirement.
+- Vite is started without a shell, bound to loopback, with a strict port.
+- The browser opens only after the local server responds successfully.
 
-- HOMER's Groq chat API remains hosted; this feature does not add a local LLM.
-- The upstream app's code is MIT-licensed. Third-party datasets, camera feeds, 3D models, imagery and API providers have separate terms. Review upstream `DATA_SOURCES.md`, `SECURITY.md` and asset-specific licenses before redistributing or using them.
-- Do not commit API keys or access tokens. Configure provider keys locally in the globe app.
-- Keep the local globe bound to loopback. Do not expose it to a LAN or public network without reviewing its security model.
-- This is exploratory public-data visualization, not navigation, emergency response, or an operational targeting system. Do not use it to identify or track private individuals.
+If startup fails, run npm run doctor in the globe folder and verify port 4173
+is free. HOMER reports missing dependencies, unsupported Node versions, and
+startup timeouts in its status bar. If Vite exits during startup, inspect `.homer-globe.log`.
 
-## References
+## Data, privacy and safety
 
-- Upstream: https://github.com/bilawalsidhu/gods-eye-view
-- Upstream data-source and license notes: https://github.com/bilawalsidhu/gods-eye-view/blob/main/DATA_SOURCES.md
-- Upstream security notes: https://github.com/bilawalsidhu/gods-eye-view/blob/main/SECURITY.md
+The upstream globe retrieves public geospatial data and third-party imagery.
+The source-code license does not automatically cover every dataset, tile,
+camera feed, map, or 3D asset. Review the upstream
+[DATA_SOURCES.md](https://github.com/bilawalsidhu/gods-eye-view/blob/main/DATA_SOURCES.md)
+and [SECURITY.md](https://github.com/bilawalsidhu/gods-eye-view/blob/main/SECURITY.md)
+before redistribution or use. Configure provider keys locally; never commit
+secrets. HOMER keeps the service on loopback and does not expose it to a LAN.
+
+This is a public-data visualization workspace, not a navigation, emergency
+response, or operational targeting system. Do not use it to identify or track
+private individuals.
+
+## Upstream
+
+https://github.com/bilawalsidhu/gods-eye-view

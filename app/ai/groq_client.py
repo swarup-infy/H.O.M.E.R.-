@@ -272,6 +272,82 @@ async def clear_history() -> None:
         _history.clear()
 
 
+def _is_temporary_provider_failure(exc: Exception) -> bool:
+    """Return True only for network, timeout, rate-limit, and server failures."""
+    status = getattr(exc, "status_code", None)
+    if status == 429 or (isinstance(status, int) and 500 <= status <= 599):
+        return True
+    name = type(exc).__name__.casefold()
+    if name in {
+        "apiconnectionerror",
+        "apitimeouterror",
+        "internalservererror",
+        "ratelimiterror",
+        "timeoutexception",
+        "connecterror",
+        "readtimeout",
+        "connecttimeout",
+    }:
+        return True
+    return isinstance(exc, (TimeoutError, ConnectionError))
+
+
+async def _ask_offline(user_message: str) -> str:
+    """Generate locally, using the same history and local RAG for chat and voice."""
+    from app.ai.offline_model import (
+        OfflineModelUnavailable,
+        generate_reply,
+        model_status,
+    )
+
+    settings = get_settings()
+    if not settings.offline_fallback_enabled:
+        raise AIProviderNotConfigured(
+            "Groq is unavailable and HOMER's offline fallback is disabled."
+        )
+    if not model_status()["ready"]:
+        raise AIProviderNotConfigured(
+            "Groq is unavailable and the offline model is not installed. "
+            "While online, install requirements-offline.txt and run "
+            "python -m app.ai.offline_model download."
+        )
+
+    async with _history_lock:
+        history = list(_history)
+    retrieved = search_knowledge(user_message, limit=4)
+    knowledge_context = build_knowledge_context(retrieved)
+    offline_prompt = SYSTEM_PROMPT + (
+        "\n\nOFFLINE MODE LIMITATIONS:\n"
+        "- You are running a small local model without internet access. "
+        "Do not claim to have searched the web or checked current information.\n"
+        "- Answer from your built-in knowledge and the local knowledge excerpts "
+        "provided below. If uncertain, say so clearly.\n"
+        "- Do not claim to perform computer actions or call tools. Explicit "
+        "allowlisted desktop commands are handled separately by HOMER.\n"
+        "- Prefer short, practical answers suitable for text-to-speech."
+    )
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": offline_prompt},
+        *([{"role": "system", "content": knowledge_context}] if knowledge_context else []),
+        *history,
+        {"role": "user", "content": user_message},
+    ]
+    try:
+        reply = await asyncio.to_thread(generate_reply, messages)
+    except OfflineModelUnavailable as exc:
+        logger.exception("HOMER offline model could not respond")
+        raise RuntimeError(
+            "Groq is unavailable and the local offline model could not start. "
+            "Check the offline model installation and available RAM."
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected offline model failure")
+        raise RuntimeError(
+            "Groq is unavailable and HOMER's offline response failed."
+        ) from exc
+    return await _save_direct_history(user_message, reply)
+
+
 async def ask_homer(user_message: str) -> str:
     """Send a message to the configured Groq model with bounded chat context."""
     # Clear, explicitly requested computer actions must not depend on the LLM
@@ -285,9 +361,8 @@ async def ask_homer(user_message: str) -> str:
     settings = get_settings()
 
     if not settings.groq_api_key or settings.groq_api_key == "replace_me":
-        raise AIProviderNotConfigured(
-            "GROQ_API_KEY is missing. Copy .env.example to .env and add your key."
-        )
+        logger.info("Groq API key is not configured; checking the local offline fallback.")
+        return await _ask_offline(user_message)
 
     client = AsyncGroq(
         api_key=settings.groq_api_key,
@@ -387,6 +462,13 @@ async def ask_homer(user_message: str) -> str:
             final_text = final_response.choices[0].message.content or json.dumps(last_tool_result)
         if final_text is None:
             final_text = "I could not generate a response for that request."
+        # Free RAM after a successful online response if a previous request
+        # had loaded the CPU fallback model.
+        try:
+            from app.ai.offline_model import unload_model
+            await asyncio.to_thread(unload_model)
+        except Exception:
+            logger.debug("Could not unload the offline model after online recovery.", exc_info=True)
         async with _history_lock:
             _history.extend([
                 {"role": "user", "content": user_message},
@@ -397,9 +479,13 @@ async def ask_homer(user_message: str) -> str:
 
     except Exception as exc:
         logger.exception("Groq request failed (%s)", type(exc).__name__)
+        if settings.offline_fallback_enabled and _is_temporary_provider_failure(exc):
+            logger.warning("Groq is temporarily unavailable; switching this request to the local CPU model.")
+            return await _ask_offline(user_message)
         raise RuntimeError(
             "The AI provider request failed. Check your internet connection, API key, "
-            "account access, and configured model ID."
+            "account access, and configured model ID. Authentication and invalid-model "
+            "errors do not trigger offline fallback."
         ) from exc
 
     finally:

@@ -103,6 +103,28 @@ async def search_local_knowledge(q: str = Query(min_length=1, max_length=500), l
     return {"query": q, "count": len(results), "results": [item.as_dict() for item in results]}
 
 
+@app.get("/ai/status")
+async def ai_status() -> dict:
+    """Report online-first routing and local fallback readiness without loading it."""
+    from app.ai.offline_model import MODEL_NAME, model_status
+
+    settings = get_settings()
+    offline = model_status()
+    return {
+        "mode": "online_first",
+        "primary_provider": "groq",
+        "primary_model": settings.groq_model,
+        "api_key_configured": bool(
+            settings.groq_api_key and settings.groq_api_key != "replace_me"
+        ),
+        "offline_fallback_enabled": settings.offline_fallback_enabled,
+        "offline_model": MODEL_NAME,
+        "offline_model_ready": offline["ready"],
+        "offline_model_size_mb": offline["size_mb"],
+        "fallback_triggers": ["network_error", "timeout", "rate_limit", "provider_5xx"],
+    }
+
+
 @app.get("/health")
 async def health() -> dict[str, str | bool]:
     """Report app status without exposing credentials."""

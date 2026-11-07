@@ -30,6 +30,15 @@ def _read_float(name: str, default: float, *, minimum: float, maximum: float) ->
     return value
 
 
+def _read_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, str(default)).strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean (true or false).")
+
+
 class Settings:
     """Application settings loaded and validated from environment variables."""
 
@@ -37,6 +46,21 @@ class Settings:
         self.llm_provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
         if self.llm_provider != "groq":
             raise ValueError("LLM_PROVIDER currently supports only 'groq'.")
+
+        # Groq is always preferred. The local model is loaded only on fallback.
+        self.offline_fallback_enabled = _read_bool(
+            "HOMER_OFFLINE_FALLBACK", True
+        )
+        self.offline_model_path = os.getenv("HOMER_OFFLINE_MODEL_PATH", "").strip()
+        self.offline_context = _read_int(
+            "HOMER_OFFLINE_CONTEXT", 1536, minimum=512, maximum=4096
+        )
+        self.offline_threads = _read_int(
+            "HOMER_OFFLINE_THREADS", 2, minimum=1, maximum=8
+        )
+        self.offline_max_tokens = _read_int(
+            "HOMER_OFFLINE_MAX_TOKENS", 256, minimum=64, maximum=1024
+        )
 
         self.groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
         self.groq_model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip()

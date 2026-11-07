@@ -1,0 +1,5 @@
+# Optional CPU-only local fallback. Install only if you want offline chat.
+# The CPU wheel index avoids building llama.cpp from source on Windows.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python>=0.3.16,<0.4
+huggingface-hub>=0.26,<2.0

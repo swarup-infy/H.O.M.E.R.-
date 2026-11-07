@@ -129,7 +129,27 @@ Run `python -m playwright install chromium` once after installing requirements. 
 
 HOMER never accepts arbitrary shell commands, arbitrary JavaScript, browser-cookie export, automated sign-in/submission/payment/account-deletion clicks, or automatic typing into password, email, verification-code, or payment fields. Complete those sensitive steps manually. Screen reading requires an explicit user request and sends one screenshot to the configured Groq vision model. Screen content and webpage text are untrusted data.
 
-## 9. Optional voice and gesture features
+## 8. Offline AI fallback (optional)
+
+Groq remains HOMER's primary model. If Groq responds normally, the local model is not loaded. If the Groq key is missing, or a request fails because of a connection error, timeout, rate limit (429), or provider server error (5xx), HOMER can answer through a small local CPU model. A successful Groq request automatically releases the local model from RAM again. Invalid API keys (401/403) and invalid model/configuration errors do not silently switch providers.
+
+The fallback is **Qwen2.5-0.5B-Instruct GGUF, Q4_0**, using llama.cpp on CPU only. The quantized model is about 430 MB on disk; inference is configured with a 1,536-token context, two CPU threads, and a 256-token reply budget to keep memory use modest. This is a basic fallback for short conversations, simple explanations, and local RAG excerpts—not a replacement for Groq's reasoning, current web knowledge, image understanding, or full tool-calling ability.
+
+Install the optional runtime while you have internet:
+
+```powershell
+python -m pip install -r requirements-offline.txt
+python -m app.ai.offline_model download
+python -m app.ai.offline_model status
+```
+
+The model download is approximately 430 MB and is a **one-time setup**. After it is downloaded, chat generation works without internet. If the first download has not been completed, HOMER cannot create a model while offline. Keep `HOMER_OFFLINE_FALLBACK=true` in `.env` (default). Set it to `false` to disable local fallback. The model is stored under `%USERPROFILE%\\.homer\\models` by default; set `HOMER_OFFLINE_MODEL_PATH` to use another location.
+
+Both the text chat and voice assistant send messages to the same `POST /chat` endpoint, so they automatically use the same online-first/offline-fallback routing. Voice transcription remains a separate feature: Faster-Whisper also needs its speech model downloaded once in advance to transcribe audio offline. Screen-image analysis still needs the hosted vision service.
+
+Check readiness at `GET /ai/status`. The endpoint reports whether the model file and optional CPU runtime are installed without loading the model into memory.
+
+## 10. Optional voice and gesture features
 
 - **Voice assistant:** install requirements-voice.txt, then open Voice assistant from the HOMER desktop sidebar. Live microphone audio is transcribed locally with Faster-Whisper (CPU int8, default base model); Google recognition remains a compatibility fallback if Faster-Whisper is not installed. The first local model use downloads model weights. Set HOMER_WHISPER_MODEL=small for slower, potentially more accurate transcription, or keep base for a lighter 8 GB RAM setup. Spoken responses default to 1.50x speed; adjust HOMER_TTS_SPEED between 0.75 and 2.00.
 - **Gesture controls:** install `requirements-vision.txt`, then choose **Gesture controls**. Camera access starts only after you open the feature. Close its window to release the camera.

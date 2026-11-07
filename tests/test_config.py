@@ -18,6 +18,11 @@ SETTING_ENV_VARS = (
     "GROQ_MAX_RETRIES",
     "HOMER_CHAT_HISTORY_MESSAGES",
     "HOMER_MAX_MESSAGE_CHARS",
+    "HOMER_OFFLINE_FALLBACK",
+    "HOMER_OFFLINE_MODEL_PATH",
+    "HOMER_OFFLINE_CONTEXT",
+    "HOMER_OFFLINE_THREADS",
+    "HOMER_OFFLINE_MAX_TOKENS",
 )
 
 
@@ -74,4 +79,42 @@ def test_empty_model_name_is_rejected(monkeypatch) -> None:
     monkeypatch.setenv("GROQ_MODEL", "   ")
 
     with pytest.raises(ValueError, match="GROQ_MODEL cannot be empty"):
+        Settings()
+
+
+def test_offline_fallback_defaults_to_enabled_but_is_not_loaded(monkeypatch) -> None:
+    clear_setting_environment(monkeypatch)
+    settings = Settings()
+    assert settings.offline_fallback_enabled is True
+    assert settings.offline_context == 1536
+    assert settings.offline_threads == 2
+    assert settings.offline_max_tokens == 256
+
+
+def test_offline_fallback_can_be_disabled(monkeypatch) -> None:
+    clear_setting_environment(monkeypatch)
+    monkeypatch.setenv("HOMER_OFFLINE_FALLBACK", "false")
+    assert Settings().offline_fallback_enabled is False
+
+
+@pytest.mark.parametrize("value", ["maybe", "2", "enabled-ish"])
+def test_invalid_offline_fallback_boolean_is_rejected(monkeypatch, value) -> None:
+    clear_setting_environment(monkeypatch)
+    monkeypatch.setenv("HOMER_OFFLINE_FALLBACK", value)
+    with pytest.raises(ValueError, match="must be a boolean"):
+        Settings()
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "message"),
+    [
+        ("HOMER_OFFLINE_CONTEXT", "400", "between 512 and 4096"),
+        ("HOMER_OFFLINE_THREADS", "0", "between 1 and 8"),
+        ("HOMER_OFFLINE_MAX_TOKENS", "32", "between 64 and 1024"),
+    ],
+)
+def test_offline_model_limits_are_validated(monkeypatch, name, value, message) -> None:
+    clear_setting_environment(monkeypatch)
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError, match=message):
         Settings()

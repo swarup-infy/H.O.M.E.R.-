@@ -220,6 +220,12 @@ def git_status(project_path: str = "") -> dict:
 
 
 @mcp.tool()
+def execute_workspace_preset(name: str, confirmed: bool) -> dict:
+    """Open an allowlisted workspace preset's URLs only after explicit confirmation."""
+    return execute_tool("execute_workspace_preset", {"name": name, "confirmed": confirmed})
+
+
+@mcp.tool()
 def create_code_draft(description: str, language: str = "python") -> dict:
     """Prepare a code generation prompt without writing or executing code."""
     return execute_tool("create_code_draft", {"description": description, "language": language})

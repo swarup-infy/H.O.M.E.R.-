@@ -65,7 +65,7 @@ def test_model_status_reports_missing_model_without_loading(monkeypatch, tmp_pat
     status = offline_client.model_status()
     assert status["model_downloaded"] is False
     assert status["gpu_required"] is False
-    assert status["context_tokens"] == 2048
+    assert status["context_tokens"] == 1024
 
 
 def test_unload_model_closes_and_releases_cached_instance(monkeypatch):

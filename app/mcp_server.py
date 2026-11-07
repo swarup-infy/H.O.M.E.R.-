@@ -98,5 +98,89 @@ def click_visible_control(target: str) -> dict:
     return execute_tool("click_screen_target", {"target": target})
 
 
+@mcp.tool()
+def save_workspace_memory(title: str, content: str, category: str = "note") -> dict:
+    """Save a user-requested note or project fact in HOMER's local memory."""
+    return execute_tool("save_workspace_memory", {"title": title, "content": content, "category": category})
+
+
+@mcp.tool()
+def search_workspace_memory(query: str, limit: int = 5) -> dict:
+    """Search HOMER's local notes and project memories."""
+    return execute_tool("search_workspace_memory", {"query": query, "limit": limit})
+
+
+@mcp.tool()
+def delete_workspace_memory(memory_id: int) -> dict:
+    """Delete one memory by ID only after the user explicitly requests deletion."""
+    return execute_tool("delete_workspace_memory", {"memory_id": memory_id})
+
+
+@mcp.tool()
+def create_reminder(title: str, minutes_from_now: int) -> dict:
+    """Create a local one-shot reminder. HOMER must be running at its due time."""
+    return execute_tool("create_reminder", {"title": title, "minutes_from_now": minutes_from_now})
+
+
+@mcp.tool()
+def list_reminders(include_completed: bool = False) -> dict:
+    """List reminders saved on this device."""
+    return execute_tool("list_reminders", {"include_completed": include_completed})
+
+
+@mcp.tool()
+def complete_reminder(reminder_id: int) -> dict:
+    """Mark one saved reminder as complete by its ID."""
+    return execute_tool("complete_reminder", {"reminder_id": reminder_id})
+
+
+@mcp.tool()
+def get_system_status() -> dict:
+    """Read basic local CPU, RAM, disk and battery telemetry. Read-only."""
+    return execute_tool("get_system_status", {})
+
+
+@mcp.tool()
+def save_workspace_memory(title: str, content: str, category: str = "note") -> dict:
+    """Save a user-requested note or project fact in HOMER's local memory."""
+    return execute_tool("save_workspace_memory", {"title": title, "content": content, "category": category})
+
+
+@mcp.tool()
+def search_workspace_memory(query: str, limit: int = 5) -> dict:
+    """Search HOMER's local notes and project memories."""
+    return execute_tool("search_workspace_memory", {"query": query, "limit": limit})
+
+
+@mcp.tool()
+def delete_workspace_memory(memory_id: int) -> dict:
+    """Delete one memory by ID only after the user explicitly requests deletion."""
+    return execute_tool("delete_workspace_memory", {"memory_id": memory_id})
+
+
+@mcp.tool()
+def create_reminder(title: str, minutes_from_now: int) -> dict:
+    """Create a local one-shot reminder. HOMER must be running at its due time."""
+    return execute_tool("create_reminder", {"title": title, "minutes_from_now": minutes_from_now})
+
+
+@mcp.tool()
+def list_reminders(include_completed: bool = False) -> dict:
+    """List reminders saved on this device."""
+    return execute_tool("list_reminders", {"include_completed": include_completed})
+
+
+@mcp.tool()
+def complete_reminder(reminder_id: int) -> dict:
+    """Mark one saved reminder as complete by its ID."""
+    return execute_tool("complete_reminder", {"reminder_id": reminder_id})
+
+
+@mcp.tool()
+def get_system_status() -> dict:
+    """Read basic local CPU, RAM, disk and battery telemetry. Read-only."""
+    return execute_tool("get_system_status", {})
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

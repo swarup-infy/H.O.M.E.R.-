@@ -35,3 +35,13 @@ def test_notepad_launch_is_called_on_windows(monkeypatch) -> None:
 
     assert result["ok"] is True
     assert calls == [((['notepad.exe'],), {"shell": False})]
+
+
+def test_local_memory_tool_dispatch_is_allowlisted(monkeypatch, tmp_path):
+    from app.memory import workspace
+    monkeypatch.setattr(workspace, "database_path", lambda: tmp_path / "registry-test.sqlite3")
+    result = registry.execute_tool("save_workspace_memory", {
+        "title": "test", "content": "safe local memory"
+    })
+    assert result["ok"] is True
+    assert registry.execute_tool("unknown_local_tool", {})["ok"] is False

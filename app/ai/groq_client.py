@@ -149,7 +149,8 @@ def ai_runtime_status() -> dict[str, Any]:
 
     settings = get_settings()
     return {
-        "default_provider": "groq",
+        "ai_mode": getattr(settings, "ai_mode", "auto"),
+        "default_provider": "local" if getattr(settings, "ai_mode", "auto") == "offline" else "groq",
         "last_used_provider": _last_provider,
         "online_api_key_configured": bool(
             settings.groq_api_key and settings.groq_api_key != "replace_me"
@@ -374,24 +375,25 @@ async def clear_history() -> None:
 
 async def ask_homer(user_message: str) -> str:
     """Send a message to the configured Groq model with bounded chat context."""
-    # Clear, explicitly requested computer actions must not depend on the LLM
-    # deciding to call a tool. Run them locally and report the real tool result.
-    direct = _direct_desktop_command(user_message)
-    if direct is not None:
-        tool_name, arguments = direct
-        result = execute_tool(tool_name, arguments)
-        return await _save_direct_history(user_message, _format_direct_result(tool_name, result))
-
     settings = get_settings()
 
+    # Explicit offline mode never calls Groq or runs computer/browser tools.
+    if getattr(settings, "ai_mode", "auto") != "offline":
+        direct = _direct_desktop_command(user_message)
+        if direct is not None:
+            tool_name, arguments = direct
+            result = execute_tool(tool_name, arguments)
+            return await _save_direct_history(user_message, _format_direct_result(tool_name, result))
+
+    if getattr(settings, "ai_mode", "auto") == "offline":
+        return await _answer_offline(user_message, settings, "offline mode was selected in HOMER_AI_MODE.")
+
     if not settings.groq_api_key or settings.groq_api_key == "replace_me":
-        if getattr(settings, "offline_fallback_enabled", False):
-            from app.ai.offline_client import internet_available
-            if not await asyncio.to_thread(internet_available):
-                return await _answer_offline(
-                    user_message, settings,
-                    "Groq credentials are not configured and the API host is unreachable.",
-                )
+        if getattr(settings, "offline_fallback_enabled", False) and getattr(settings, "ai_mode", "auto") == "auto":
+            return await _answer_offline(
+                user_message, settings,
+                "Groq credentials are not configured; using the local model.",
+            )
         raise AIProviderNotConfigured(
             "GROQ_API_KEY is missing. Copy .env.example to .env and add your key."
         )

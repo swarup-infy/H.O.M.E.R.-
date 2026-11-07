@@ -182,5 +182,48 @@ def get_system_status() -> dict:
     return execute_tool("get_system_status", {})
 
 
+
+@mcp.tool()
+def start_timer(seconds: int, label: str = "Timer") -> dict:
+    """Start a local countdown up to 24 hours."""
+    return execute_tool("start_timer", {"seconds": seconds, "label": label})
+
+
+@mcp.tool()
+def list_timers() -> dict:
+    """List timers started during this HOMER process."""
+    return execute_tool("list_timers", {})
+
+
+@mcp.tool()
+def get_workspace_presets() -> dict:
+    """List workspace suggestions without launching apps or changing system settings."""
+    return execute_tool("get_workspace_presets", {})
+
+
+@mcp.tool()
+def web_search(query: str, provider: str = "duckduckgo") -> dict:
+    """Open a search query in the default browser."""
+    return execute_tool("web_search", {"query": query, "provider": provider})
+
+
+@mcp.tool()
+def get_weather(city: str) -> dict:
+    """Fetch current weather conditions for a city using Open-Meteo."""
+    return execute_tool("get_weather", {"city": city})
+
+
+@mcp.tool()
+def git_status(project_path: str = "") -> dict:
+    """Read-only Git status for an allowed project folder; no changes are made."""
+    return execute_tool("git_status", {"project_path": project_path})
+
+
+@mcp.tool()
+def create_code_draft(description: str, language: str = "python") -> dict:
+    """Prepare a code generation prompt without writing or executing code."""
+    return execute_tool("create_code_draft", {"description": description, "language": language})
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

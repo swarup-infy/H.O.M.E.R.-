@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
+from dotenv import load_dotenv
 
 DEFAULT_GLOBE_URL = "http://127.0.0.1:4173"
 _ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -22,6 +23,7 @@ _ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 def get_globe_url(environ: dict[str, str] | None = None) -> str:
     """Return a validated loopback-only globe URL."""
+    load_dotenv()
     env = os.environ if environ is None else environ
     raw_url = env.get("HOMER_GLOBE_URL", DEFAULT_GLOBE_URL).strip()
     try:
@@ -58,6 +60,7 @@ def resolve_globe_project(
     repo_root: Path | None = None,
 ) -> Path:
     """Find the separately cloned upstream project and validate its scripts."""
+    load_dotenv()
     env = os.environ if environ is None else environ
     configured = env.get("HOMER_GLOBE_DIR", "").strip()
     if configured:
@@ -117,6 +120,7 @@ def start_globe_service(
     which=None,
     run=None,
     popen=None,
+    windows: bool | None = None,
 ):
     """Start the upstream Vite server on loopback without opening a shell."""
     import os
@@ -124,7 +128,8 @@ def start_globe_service(
     run = run or subprocess.run
     popen = popen or subprocess.Popen
 
-    npm = (which("npm.cmd") or which("npm")) if os.name == "nt" else which("npm")
+    is_windows = os.name == "nt" if windows is None else windows
+    npm = (which("npm.cmd") or which("npm")) if is_windows else which("npm")
     node = which("node")
     if not npm or not node:
         raise RuntimeError("Node.js and npm are required. Install the supported Node 24.x release.")
@@ -140,8 +145,18 @@ def start_globe_service(
     if not 1 <= int(port) <= 65535:
         raise ValueError("The globe server port must be between 1 and 65535.")
 
-    command = [
-        npm, "run", "dev", "--", "--host", "127.0.0.1",
+    if is_windows:
+        npm_cli = Path(npm).resolve().parent / "node_modules" / "npm" / "bin" / "npm-cli.js"
+        if not npm_cli.is_file():
+            raise RuntimeError(
+                "Could not locate npm-cli.js beside npm.cmd. Repair the Node.js/npm installation."
+            )
+        command_prefix = [node, str(npm_cli)]
+    else:
+        command_prefix = [npm]
+
+    command = command_prefix + [
+        "run", "dev", "--", "--host", "127.0.0.1",
         "--port", str(int(port)), "--strictPort",
     ]
     env = os.environ.copy()
@@ -150,10 +165,14 @@ def start_globe_service(
         "cwd": str(Path(project_dir)),
         "env": env,
         "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
+        "stdout": None,
         "stderr": subprocess.STDOUT,
         "shell": False,
     }
-    if os.name == "nt":
+    if is_windows:
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    return popen(command, **kwargs)
+
+    log_path = Path(project_dir) / ".homer-globe.log"
+    with log_path.open("ab") as log_file:
+        kwargs["stdout"] = log_file
+        return popen(command, **kwargs)

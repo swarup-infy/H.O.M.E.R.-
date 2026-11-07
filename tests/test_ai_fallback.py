@@ -128,11 +128,13 @@ def test_missing_key_uses_offline_only_when_groq_host_is_unreachable(monkeypatch
     assert "Offline with no key" in reply
 
 
-def test_missing_key_with_internet_does_not_silently_switch(monkeypatch):
+def test_missing_key_uses_local_model_with_internet_available(monkeypatch):
     monkeypatch.setattr(groq_client, "get_settings", lambda: settings(groq_api_key=""))
-    monkeypatch.setattr("app.ai.offline_client.internet_available", lambda: True)
-    with pytest.raises(groq_client.AIProviderNotConfigured):
-        asyncio.run(groq_client.ask_homer("Hello"))
+    monkeypatch.setattr(groq_client, "search_knowledge", lambda *args, **kwargs: [])
+    monkeypatch.setattr(groq_client, "build_knowledge_context", lambda results: "")
+    with patch("app.ai.offline_client.generate_reply", return_value="Local reply"):
+        reply = asyncio.run(groq_client.ask_homer("Hello"))
+    assert "Local reply" in reply
 
 
 def test_fallback_disabled_keeps_provider_error(monkeypatch):

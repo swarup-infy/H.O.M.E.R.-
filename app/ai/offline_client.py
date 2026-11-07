@@ -17,11 +17,23 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_REPO = "unsloth/SmolLM2-360M-Instruct-GGUF"
 DEFAULT_FILE = "SmolLM2-360M-Instruct-Q4_K_M.gguf"
+DEFAULT_CONTEXT_TOKENS = 1536
+DEFAULT_BATCH_SIZE = 32
+DEFAULT_MIN_AVAILABLE_RAM_MB = 900
 
 _model: Any | None = None
 _model_path: Path | None = None
 _model_lock = threading.RLock()
 _generation_lock = threading.Lock()
+
+
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Read a defensive integer setting; app.config validates the same limits."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
 
 
 def model_path() -> Path:
@@ -49,7 +61,19 @@ def model_status() -> dict[str, Any]:
         "model_path": str(path),
         "model_size_mb": round(path.stat().st_size / (1024 * 1024), 1) if downloaded else None,
         "model": "SmolLM2-360M-Instruct Q4_K_M",
-        "context_tokens": 2048,
+        "context_tokens": _bounded_env_int(
+            "HOMER_OFFLINE_CONTEXT_TOKENS", DEFAULT_CONTEXT_TOKENS, 1024, 2048
+        ),
+        "threads": _bounded_env_int("HOMER_OFFLINE_THREADS", 2, 1, 4),
+        "batch_size": _bounded_env_int(
+            "HOMER_OFFLINE_BATCH_SIZE", DEFAULT_BATCH_SIZE, 16, 64
+        ),
+        "minimum_available_ram_mb": _bounded_env_int(
+            "HOMER_OFFLINE_MIN_AVAILABLE_RAM_MB",
+            DEFAULT_MIN_AVAILABLE_RAM_MB,
+            700,
+            2000,
+        ),
         "gpu_required": False,
     }
 
@@ -91,15 +115,24 @@ def _load_model():
                 "Offline AI model is not downloaded. While online, run: "
                 "python -m app.ai.offline_model --download"
             )
+
+        minimum_ram_mb = _bounded_env_int(
+            "HOMER_OFFLINE_MIN_AVAILABLE_RAM_MB",
+            DEFAULT_MIN_AVAILABLE_RAM_MB,
+            700,
+            2000,
+        )
         try:
             import psutil
             available_mb = psutil.virtual_memory().available / (1024 * 1024)
-            if available_mb < 700:
+            if available_mb < minimum_ram_mb:
                 raise RuntimeError(
-                    f"Only {available_mb:.0f} MB RAM is available. Close other applications and retry."
+                    f"Only {available_mb:.0f} MB RAM is available; HOMER needs at "
+                    f"least {minimum_ram_mb} MB free before loading its offline model. "
+                    "Close other applications and retry."
                 )
         except ImportError:
-            pass
+            logger.warning("psutil is unavailable; skipping the offline RAM preflight.")
 
         try:
             from llama_cpp import Llama
@@ -112,9 +145,13 @@ def _load_model():
         try:
             _model = Llama(
                 model_path=str(path),
-                n_ctx=2048,
-                n_threads=max(1, min(int(os.getenv("HOMER_OFFLINE_THREADS", "2")), 4)),
-                n_batch=64,
+                n_ctx=_bounded_env_int(
+                    "HOMER_OFFLINE_CONTEXT_TOKENS", DEFAULT_CONTEXT_TOKENS, 1024, 2048
+                ),
+                n_threads=_bounded_env_int("HOMER_OFFLINE_THREADS", 2, 1, 4),
+                n_batch=_bounded_env_int(
+                    "HOMER_OFFLINE_BATCH_SIZE", DEFAULT_BATCH_SIZE, 16, 64
+                ),
                 n_gpu_layers=0,
                 use_mmap=True,
                 use_mlock=False,

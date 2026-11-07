@@ -337,6 +337,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "type": "function", "function": {
+            "name": "execute_workspace_preset",
+            "description": "Open URLs for a named workspace preset only after explicit confirmation. No shell commands, system settings, or app launching.",
+            "parameters": {"type": "object", "properties": {"name": {"type":"string","enum":["coding","study","creative","focus"]}, "confirmed": {"type":"boolean"}}, "required": ["name", "confirmed"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
             "name": "create_code_draft",
             "description": "Prepare a code-generation prompt. Does not write, compile or execute code.",
             "parameters": {"type": "object", "properties": {"description":{"type":"string","minLength":1,"maxLength":2000},"language":{"type":"string","enum":["python","javascript","typescript","html","css","java","c","cpp","rust","go","sql"]}}, "required": ["description"], "additionalProperties": False},
@@ -668,6 +675,12 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "Provide one reminder ID."}
         from app.tasks.reminders import complete_reminder
         return complete_reminder(arguments["reminder_id"])
+
+    if name == "execute_workspace_preset":
+        if set(arguments) != {"name", "confirmed"} or not isinstance(arguments.get("confirmed"), bool):
+            return {"ok": False, "error": "Provide preset name and explicit confirmation."}
+        from app.tools.ultron_compat import execute_workspace_preset
+        return execute_workspace_preset(arguments["name"], arguments["confirmed"])
 
     if name in {"start_timer", "list_timers", "get_workspace_presets", "web_search", "get_weather", "git_status", "create_code_draft"}:
         from app.tools import ultron_compat

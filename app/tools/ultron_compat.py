@@ -152,6 +152,33 @@ def git_status(project_path: str = "") -> dict[str, Any]:
         return {"ok": False, "error": f"Git status failed: {exc}"}
 
 
+
+def execute_workspace_preset(name: str, confirmed: bool = False) -> dict[str, Any]:
+    """Open the allowlisted URLs for a named preset only after explicit confirmation.
+
+    Application launchers, volume, brightness, shell commands and IoT operations
+    are deliberately excluded from the first safe implementation.
+    """
+    presets = workspace_presets()["presets"]
+    key = _clean_text(name, 30).lower()
+    if key not in presets:
+        return {"ok": False, "error": "Unknown workspace preset."}
+    if confirmed is not True:
+        return {"ok": False, "requires_confirmation": True, "preset": presets[key], "message": "Confirm before opening this preset's URLs."}
+    opened: list[str] = []
+    failures: list[str] = []
+    import webbrowser
+    for url in presets[key]["urls"]:
+        try:
+            if webbrowser.open(url):
+                opened.append(url)
+            else:
+                failures.append(url)
+        except Exception:
+            failures.append(url)
+    return {"ok": not failures, "preset": key, "opened": opened, "failed": failures}
+
+
 def create_code_draft(description: str, language: str = "python") -> dict[str, Any]:
     """Prepare a code-generation prompt, but never writes, compiles or executes generated code."""
     text = _clean_text(description, 2000)

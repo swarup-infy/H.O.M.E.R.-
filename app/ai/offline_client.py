@@ -50,7 +50,7 @@ def model_status() -> dict[str, Any]:
         "model_path": str(path),
         "model_size_mb": round(path.stat().st_size / (1024 * 1024), 1) if downloaded else None,
         "model": "SmolLM2-360M-Instruct Q4_K_M",
-        "context_tokens": 2048,
+        "context_tokens": 1024,
         "gpu_required": False,
     }
 
@@ -113,7 +113,7 @@ def _load_model():
         try:
             _model = Llama(
                 model_path=str(path),
-                n_ctx=2048,
+                n_ctx=1024,
                 n_threads=max(1, min(int(os.getenv("HOMER_OFFLINE_THREADS", "2")), 4)),
                 n_batch=64,
                 n_gpu_layers=0,

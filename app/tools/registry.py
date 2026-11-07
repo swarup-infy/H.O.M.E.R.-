@@ -245,6 +245,63 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
         },
     }
+
+    {
+        "type": "function",
+        "function": {
+            "name": "save_workspace_memory",
+            "description": "Save a note or project fact to HOMER's local private memory. Only save when the user asks you to remember or save something.",
+            "parameters": {"type":"object","properties":{"title":{"type":"string","minLength":1,"maxLength":160},"content":{"type":"string","minLength":1,"maxLength":4000},"category":{"type":"string","maxLength":24}},"required":["title","content"],"additionalProperties":False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_workspace_memory",
+            "description": "Search HOMER's local saved notes and project memories.",
+            "parameters": {"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":200},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["query"],"additionalProperties":False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_workspace_memory",
+            "description": "Delete one saved memory by its ID, only when the user explicitly asks to forget/delete it.",
+            "parameters": {"type":"object","properties":{"memory_id":{"type":"integer","minimum":1}},"required":["memory_id"],"additionalProperties":False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_reminder",
+            "description": "Create a local one-shot reminder a number of minutes from now. HOMER must be running when it becomes due to display it.",
+            "parameters": {"type":"object","properties":{"title":{"type":"string","minLength":1,"maxLength":160},"minutes_from_now":{"type":"integer","minimum":1,"maximum":525600}},"required":["title","minutes_from_now"],"additionalProperties":False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_reminders",
+            "description": "List reminders saved locally on this device.",
+            "parameters": {"type":"object","properties":{"include_completed":{"type":"boolean"}},"additionalProperties":False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_reminder",
+            "description": "Mark one local reminder complete by ID.",
+            "parameters": {"type":"object","properties":{"reminder_id":{"type":"integer","minimum":1}},"required":["reminder_id"],"additionalProperties":False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_system_status",
+            "description": "Read basic local CPU, RAM, disk and battery telemetry. This is read-only.",
+            "parameters": {"type":"object","properties":{},"additionalProperties":False},
+        },
+    },
 ]
 
 
@@ -532,6 +589,43 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Execute a permitted action after validating its name and arguments."""
     if not isinstance(arguments, dict):
         return {"ok": False, "error": "Arguments must be an object."}
+
+    if name == "save_workspace_memory":
+        if set(arguments) - {"title", "content", "category"} or not {"title", "content"} <= set(arguments):
+            return {"ok": False, "error": "Provide a title, content, and optional category."}
+        from app.memory.workspace import save_memory
+        return save_memory(arguments["title"], arguments["content"], arguments.get("category", "note"))
+    if name == "search_workspace_memory":
+        if set(arguments) - {"query", "limit"} or "query" not in arguments:
+            return {"ok": False, "error": "Provide a memory search query."}
+        from app.memory.workspace import search_memories
+        return search_memories(arguments["query"], arguments.get("limit", 5))
+    if name == "delete_workspace_memory":
+        if set(arguments) != {"memory_id"}:
+            return {"ok": False, "error": "Provide exactly one memory ID."}
+        from app.memory.workspace import delete_memory
+        return delete_memory(arguments["memory_id"])
+    if name == "create_reminder":
+        if set(arguments) != {"title", "minutes_from_now"}:
+            return {"ok": False, "error": "Provide a reminder title and delay in minutes."}
+        from app.tasks.reminders import create_reminder
+        return create_reminder(arguments["title"], arguments["minutes_from_now"])
+    if name == "list_reminders":
+        if set(arguments) - {"include_completed"}:
+            return {"ok": False, "error": "Unsupported reminder options."}
+        from app.tasks.reminders import list_reminders
+        return list_reminders(arguments.get("include_completed", False))
+    if name == "complete_reminder":
+        if set(arguments) != {"reminder_id"}:
+            return {"ok": False, "error": "Provide one reminder ID."}
+        from app.tasks.reminders import complete_reminder
+        return complete_reminder(arguments["reminder_id"])
+    if name == "get_system_status":
+        if arguments:
+            return {"ok": False, "error": "get_system_status accepts no arguments."}
+        from app.system.monitor import system_status
+        return system_status()
+
     if name == "open_website":
         return _open_website(arguments)
     if name == "play_youtube_video":

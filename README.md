@@ -115,7 +115,7 @@ HOMER indexes supported project files and the local documents folder when the AP
 
 HOMER always tries Groq first. If the Groq API cannot be reached, times out, or returns a temporary server error, HOMER automatically switches that request to a small local model. When Groq is reachable again, the next request uses Groq automatically. Invalid API keys and authentication/permission errors are reported instead of silently switching providers. Rate-limit responses are also reported as online-provider errors.
 
-The offline fallback is **SmolLM2-360M-Instruct Q4_K_M** (a roughly 271 MB GGUF file), loaded through the CPU build of `llama-cpp-python`. It uses a 2,048-token context, two CPU threads by default, and zero GPU layers. It is deliberately small for low-memory computers. Expect simpler and less reliable answers than Groq; it is an English-focused helper, not a replacement for the online model. Offline mode does not call browser/computer tools or access cloud services. It can use HOMER's local SQLite knowledge index.
+The offline fallback is **SmolLM2-360M-Instruct Q4_K_M** (a roughly 271 MB GGUF file), loaded through the CPU build of `llama-cpp-python`. Its conservative defaults are a 1,536-token context, two CPU threads, a 32-token batch, memory-mapped weights, and zero GPU layers. Before loading, HOMER checks that at least 900 MB of system memory is available. This is designed for low-memory 4 GB RAM / CPU-only computers, but actual performance depends on how much memory Windows and other running applications are using. It is deliberately small; expect simpler and less reliable answers than Groq. Expect simpler and less reliable answers than Groq; it is an English-focused helper, not a replacement for the online model. Offline mode does not call browser/computer tools or access cloud services. It can use HOMER's local SQLite knowledge index.
 
 ### One-time offline setup (while internet is available)
 
@@ -139,6 +139,9 @@ Optional settings in `.env`:
 HOMER_OFFLINE_FALLBACK_ENABLED=true
 HOMER_OFFLINE_THREADS=2
 HOMER_OFFLINE_MAX_TOKENS=160
+HOMER_OFFLINE_CONTEXT_TOKENS=1536
+HOMER_OFFLINE_BATCH_SIZE=32
+HOMER_OFFLINE_MIN_AVAILABLE_RAM_MB=900
 # Optional: use a different local GGUF file
 # HOMER_OFFLINE_MODEL_PATH=C:\\Models\\SmolLM2-360M-Instruct-Q4_K_M.gguf
 ```

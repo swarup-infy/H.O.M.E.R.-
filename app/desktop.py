@@ -148,6 +148,12 @@ class HomerWindow(QMainWindow):
         self.worker = None
         self.voice_window = None
         self.conversation_messages = []
+        self._globe_process = None
+        self._globe_url = None
+        self._globe_poll_attempts = 0
+        self._globe_poll_timer = QTimer(self)
+        self._globe_poll_timer.setInterval(500)
+        self._globe_poll_timer.timeout.connect(self._poll_gods_eye_view)
 
         self.setWindowTitle("HOMER | Desktop AI Assistant")
         self.resize(1100, 760)
@@ -498,24 +504,80 @@ class HomerWindow(QMainWindow):
             self.add_message("HOMER", f"Could not start hand controls: {exc}")
 
     def open_gods_eye_view(self):
-        """Open the optional local God’s Eye View service."""
-        import os
+        """Start or open the optional local God's Eye View workspace."""
         import webbrowser
-        from urllib.parse import urlparse
 
-        url = os.getenv("HOMER_GLOBE_URL", "http://127.0.0.1:4173").strip()
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            self.set_status("Invalid HOMER_GLOBE_URL. Use a local HTTP(S) URL.")
-            return
-        if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
-            self.set_status("For safety, the globe launcher only opens localhost URLs.")
-            return
-
-        webbrowser.open(url)
-        self.set_status(
-            "Opening the local globe in your browser. Start the globe service first."
+        from app.globe_service import (
+            check_globe_ready,
+            get_globe_port,
+            get_globe_url,
+            resolve_globe_project,
+            start_globe_service,
         )
+
+        try:
+            url = get_globe_url()
+        except ValueError as exc:
+            self.set_status(f"God's Eye View configuration error: {exc}")
+            return
+
+        self._globe_url = url
+        if check_globe_ready(url):
+            if webbrowser.open(url):
+                self.set_status("God's Eye View is running and opened in your browser.")
+            else:
+                self.set_status(
+                    "God's Eye View is running, but Windows could not open the browser."
+                )
+            return
+
+        if self._globe_process is None or self._globe_process.poll() is not None:
+            try:
+                project_dir = resolve_globe_project()
+                self._globe_process = start_globe_service(
+                    project_dir, get_globe_port(url)
+                )
+            except (FileNotFoundError, RuntimeError, ValueError) as exc:
+                self.set_status(str(exc))
+                return
+
+        self._globe_poll_attempts = 0
+        self._globe_poll_timer.start()
+        self.set_status(
+            "Starting God's Eye View… waiting for the local 3D globe service."
+        )
+
+    def _poll_gods_eye_view(self):
+        """Wait asynchronously for Vite/Cesium to become reachable."""
+        import webbrowser
+
+        from app.globe_service import check_globe_ready
+
+        self._globe_poll_attempts += 1
+        if self._globe_url and check_globe_ready(self._globe_url):
+            self._globe_poll_timer.stop()
+            if webbrowser.open(self._globe_url):
+                self.set_status("God's Eye View is ready and opened in your browser.")
+            else:
+                self.set_status(
+                    "God's Eye View is ready, but Windows could not open the browser."
+                )
+            return
+
+        if self._globe_process is not None and self._globe_process.poll() is not None:
+            self._globe_poll_timer.stop()
+            self.set_status(
+                "God's Eye View stopped while starting. Check the globe project's "
+                "terminal/log output and run npm run doctor."
+            )
+            return
+
+        if self._globe_poll_attempts >= 60:
+            self._globe_poll_timer.stop()
+            self.set_status(
+                "God's Eye View did not become ready within 30 seconds. "
+                "Check the globe project's dependencies and port 4173."
+            )
 
     def handle_voice_mode_switch(self, mode: str):
         """Route explicit voice commands to the requested desktop mode."""

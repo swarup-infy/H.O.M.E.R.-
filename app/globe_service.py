@@ -33,7 +33,7 @@ def get_globe_url(environ: dict[str, str] | None = None) -> str:
         raise ValueError("HOMER_GLOBE_URL has an invalid port or URL.") from exc
 
     if (
-        parsed.scheme not in {"http", "https"}
+        parsed.scheme != "http"
         or not parsed.hostname
         or parsed.hostname.lower() not in _ALLOWED_HOSTS
         or parsed.username is not None
@@ -41,7 +41,7 @@ def get_globe_url(environ: dict[str, str] | None = None) -> str:
         or parsed.fragment
     ):
         raise ValueError(
-            "HOMER_GLOBE_URL must be an HTTP(S) localhost URL "
+            "HOMER_GLOBE_URL must be an HTTP localhost URL "
             "(127.0.0.1, localhost, or ::1)."
         )
     if port is not None and not 1 <= port <= 65535:
@@ -52,7 +52,7 @@ def get_globe_url(environ: dict[str, str] | None = None) -> str:
 def get_globe_port(url: str) -> int:
     """Get the explicit URL port or its HTTP(S) default."""
     parsed = urlsplit(url)
-    return parsed.port or (443 if parsed.scheme == "https" else 4173)
+    return parsed.port or 4173
 
 
 def resolve_globe_project(

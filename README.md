@@ -212,3 +212,15 @@ python -m app.desktop
 The Mark LIII video channel can be used as general inspiration for assistant workflows, but its setup commands and Gemini key instructions are not HOMER setup instructions: https://www.youtube.com/@FatihMakes
 
 Run the interactive microphone/speaker smoke test after installing the voice pack with `python -m app.voice.manual_voice_test` (root-level alternative: `python manual_voice_test.py`). This manually opens the microphone and plays audio; it is not part of automated CI. See also [voice docs](app/voice/README.md), [gesture docs](app/vision/README.md), and [component attribution](docs/COMPONENTS.md).
+
+
+## Ultron-inspired HOMER capabilities (native implementation)
+
+HOMER implements a small set of additional local capabilities using its existing FastAPI, allowlisted tool registry, and MCP server. The integration is inspired by the publicly documented feature categories in [AbuZar-Ansarii/Ultron](https://github.com/AbuZar-Ansarii/Ultron); it does not copy Ultron source files or assets.
+
+- **Workspace recall:** SQLite FTS5 memories; use only when the user asks HOMER to save/remember, search, or delete a memory. Data stays under `~/.homer/memory/`.
+- **Reminders:** local one-shot reminders persisted under `~/.homer/tasks/`. HOMER must be running at the due time for the reminder to be surfaced; OS-level notifications and background service behavior are not implemented yet.
+- **System telemetry:** read-only CPU, RAM, disk, and battery values via optional `psutil`.
+- **MCP:** memory, reminder, and system-status tools are exposed by the existing local MCP endpoint.
+
+HOMER does not import arbitrary Ultron action files. Features that run shell commands, modify network settings, scan nearby devices, collect biometrics, monitor webcams, delete files, send messages, self-modify code, control drones, or execute background agent swarms are excluded from this integration. Existing HOMER browser/desktop/gesture features remain governed by HOMER's own allowlists and user-request flow.

@@ -355,7 +355,7 @@ class VoiceTask(QObject):
                 else:
                     self.state.emit("RESPONDING")
         except httpx.ConnectError:
-            self.error.emit("Cannot reach HOMER's API. Start the FastAPI server on 127.0.0.1:8000.")
+            self.error.emit("HOMER’s local API is not running. Launch with `python -m app.desktop`; if it still fails, inspect %USERPROFILE%\\.homer\\logs\\api.log.")
         except httpx.TimeoutException:
             self.error.emit("HOMER took too long to respond. Please try again.")
         except httpx.HTTPStatusError as exc:

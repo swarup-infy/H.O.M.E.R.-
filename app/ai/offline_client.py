@@ -36,9 +36,10 @@ def model_path() -> Path:
 def model_status() -> dict[str, Any]:
     """Return offline readiness without loading the model into RAM."""
     path = model_path()
-    enabled = os.getenv("HOMER_OFFLINE_FALLBACK_ENABLED", "true").strip().lower() in {
-        "1", "true", "yes", "on"
-    }
+    ai_mode = os.getenv("HOMER_AI_MODE", "auto").strip().lower()
+    enabled = ai_mode == "offline" or os.getenv(
+        "HOMER_OFFLINE_FALLBACK_ENABLED", "true"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     runtime_installed = importlib.util.find_spec("llama_cpp") is not None
     downloaded = path.is_file() and path.stat().st_size > 100_000_000
     return {

@@ -50,7 +50,7 @@ def get_globe_url(environ: dict[str, str] | None = None) -> str:
 def get_globe_port(url: str) -> int:
     """Get the explicit URL port or its HTTP(S) default."""
     parsed = urlsplit(url)
-    return parsed.port or (443 if parsed.scheme == "https" else 80)
+    return parsed.port or (443 if parsed.scheme == "https" else 4173)
 
 
 def resolve_globe_project(

@@ -26,10 +26,15 @@ CORE_IMPORTS = {
     "psutil": "psutil",
     "pyautogui": "pyautogui",
     "PIL": "Pillow",
+    "pypdf": "pypdf",
+    "docx": "python-docx",
+    "mcp": "mcp",
+    "playwright": "playwright",
 }
 OPTIONAL_IMPORTS = {
     "voice": {
         "speech_recognition": "SpeechRecognition",
+        "pyaudio": "PyAudio",
         "pyttsx3": "pyttsx3",
         "faster_whisper": "faster-whisper",
     },

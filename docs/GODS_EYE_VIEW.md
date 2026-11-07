@@ -11,7 +11,7 @@ Keep the upstream project beside HOMER (recommended) or set HOMER_GLOBE_DIR
 in HOMER's local .env file:
 
 ~~~powershell
-cd D:\\Software
+cd D:\Software
 git clone https://github.com/bilawalsidhu/gods-eye-view.git
 cd gods-eye-view
 npm ci
@@ -27,7 +27,7 @@ starts the local Vite server bound to 127.0.0.1 on port 4173 by default,
 waits up to 30 seconds, and opens the globe when it responds. If the service is
 already running, HOMER reuses it. If you use another local port, set
 HOMER_GLOBE_URL=http://127.0.0.1:PORT. If the checkout is elsewhere, set
-HOMER_GLOBE_DIR=D:\\path\\to\\gods-eye-view.
+HOMER_GLOBE_DIR=D:\path\\to\\gods-eye-view.
 
 ## What HOMER verifies
 

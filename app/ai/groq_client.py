@@ -287,7 +287,7 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
             app_name = "vscode"
         return "launch_application", {"application": app_name}
 
-    if re.search(r"\b(?:what(?:'s| is)|check|tell me)\s+(?:the\s+)?(?:current\s+)?(?:system\s+)?volume\b", text):
+    if re.search(r"\b(?:what(?:'s| is)|check|tell me)\s+(?:(?:my|the)\s+)?(?:current\s+)?(?:system\s+)?volume\b", text):
         return "system_audio_control", {"action": "get"}
     if re.fullmatch(r"(?:mute|silence)(?:\s+(?:the\s+)?(?:computer|system|speakers|sound|audio|volume))?", text):
         return "system_audio_control", {"action": "mute"}
@@ -297,9 +297,9 @@ def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
     browser_volume = re.search(r"\b(?:browser|video|youtube|spotify)\s+volume\s+(up|down)\b", text)
     if browser_volume:
         return "browser_control", {"action": "volume_up" if browser_volume.group(1) == "up" else "volume_down"}
-    if re.search(r"\b(?:volume|sound)\s+(?:up|increase|louder)\b|\bturn it up\b", text):
+    if re.search(r"\b(?:volume|sound)\s+(?:up|increase|louder)\b|\bturn (?:it|the\s+(?:volume|sound)) up\b", text):
         return "system_audio_control", {"action": "volume_up"}
-    if re.search(r"\b(?:volume|sound)\s+(?:down|decrease|quieter|lower)\b|\bturn it down\b", text):
+    if re.search(r"\b(?:volume|sound)\s+(?:down|decrease|quieter|lower)\b|\bturn (?:it|the\s+(?:volume|sound)) down\b", text):
         return "system_audio_control", {"action": "volume_down"}
     if re.search(r"\b(?:mute|silence)\s+(?:the\s+)?(?:system|computer|speakers|sound|audio)\b", text):
         return "system_audio_control", {"action": "mute"}

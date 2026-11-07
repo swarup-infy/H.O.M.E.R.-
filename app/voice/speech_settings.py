@@ -11,8 +11,8 @@ DEFAULT_BASE_RATE = 165
 
 
 def speech_speed() -> float:
-    """Return the requested playback multiplier, defaulting to 1.50x."""
-    raw = os.getenv("HOMER_TTS_SPEED", "1.50").strip()
+    """Return the requested playback multiplier, defaulting to 1.20x."""
+    raw = os.getenv("HOMER_TTS_SPEED", "1.20").strip()
     try:
         value = float(raw)
     except ValueError as exc:

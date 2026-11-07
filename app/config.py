@@ -92,7 +92,7 @@ class Settings:
         self.offline_max_tokens = _read_int(
             "HOMER_OFFLINE_MAX_TOKENS", 160, minimum=32, maximum=256
         )
-        self.offline_context_tokens = 2048
+        self.offline_context_tokens = 1024
         self.offline_model_name = "SmolLM2-360M-Instruct Q4_K_M"
 
 

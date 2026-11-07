@@ -78,9 +78,14 @@ class Settings:
         self.max_message_chars = _read_int(
             "HOMER_MAX_MESSAGE_CHARS", 2000, minimum=1, maximum=20000
         )
+        self.ai_mode = os.getenv("HOMER_AI_MODE", "auto").strip().lower()
+        if self.ai_mode not in {"auto", "offline", "online"}:
+            raise ValueError("HOMER_AI_MODE must be auto, offline, or online.")
         self.offline_fallback_enabled = os.getenv(
             "HOMER_OFFLINE_FALLBACK_ENABLED", "true"
         ).strip().lower() in {"1", "true", "yes", "on"}
+        if self.ai_mode == "offline":
+            self.offline_fallback_enabled = True
         self.offline_threads = _read_int(
             "HOMER_OFFLINE_THREADS", 2, minimum=1, maximum=4
         )

@@ -87,7 +87,15 @@ class Settings:
         self.offline_max_tokens = _read_int(
             "HOMER_OFFLINE_MAX_TOKENS", 160, minimum=32, maximum=256
         )
-        self.offline_context_tokens = 2048
+        self.offline_context_tokens = _read_int(
+            "HOMER_OFFLINE_CONTEXT_TOKENS", 1536, minimum=1024, maximum=2048
+        )
+        self.offline_batch_size = _read_int(
+            "HOMER_OFFLINE_BATCH_SIZE", 32, minimum=16, maximum=64
+        )
+        self.offline_min_available_ram_mb = _read_int(
+            "HOMER_OFFLINE_MIN_AVAILABLE_RAM_MB", 900, minimum=700, maximum=2000
+        )
         self.offline_model_name = "SmolLM2-360M-Instruct Q4_K_M"
 
 

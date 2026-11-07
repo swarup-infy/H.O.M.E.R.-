@@ -171,8 +171,6 @@ def close_window_by_title(title: str) -> dict[str, Any]:
         try:
             still_visible = bool(window.is_visible())
         except Exception:
-            # A stale UIA element after closing is treated as closed; a live
-            # element that cannot be queried is not reported as a verified close.
             try:
                 still_visible = bool(window.exists(timeout=0.5))
             except Exception:
@@ -222,3 +220,88 @@ def maximize_window(title: str) -> dict[str, Any]:
         return {"ok": True, "window_title": name, "message": "Maximized the requested window."}
     except Exception as exc:
         return {"ok": False, "error": "Could not maximize the requested window (" + type(exc).__name__ + ")."}
+
+
+def _matching_windows(title: str):
+    """Return visible windows whose title contains a validated search string."""
+    if platform.system() != "Windows":
+        return None, {"ok": False, "error": "Window controls are supported on Windows only."}
+    if not isinstance(title, str) or not title.strip() or len(title.strip()) > 120:
+        return None, {"ok": False, "error": "Provide a window title of 1-120 characters."}
+    try:
+        from pywinauto import Desktop
+        target = title.strip().casefold()
+        matches = []
+        for window in Desktop(backend="uia").windows(visible_only=True):
+            try:
+                name = (window.window_text() or "").strip()
+                if name and target in name.casefold():
+                    matches.append((window, name))
+            except Exception:
+                continue
+        if len(matches) != 1:
+            return None, {
+                "ok": False,
+                "error": f"Expected one matching window, found {len(matches)}.",
+                "matches": [name[:120] for _, name in matches[:8]],
+            }
+        return matches[0], None
+    except Exception as exc:
+        return None, {"ok": False, "error": "Window lookup failed (" + type(exc).__name__ + ")."}
+
+
+def minimize_window(title: str) -> dict[str, Any]:
+    """Minimize exactly one visible top-level window by its title."""
+    match, error = _matching_windows(title)
+    if error:
+        return error
+    window, name = match
+    try:
+        window.minimize()
+        return {"ok": True, "window_title": name, "message": "Minimized the requested window."}
+    except Exception as exc:
+        return {"ok": False, "error": "Could not minimize the requested window (" + type(exc).__name__ + ")."}
+
+
+def restore_window(title: str) -> dict[str, Any]:
+    """Restore and focus exactly one visible top-level window by its title."""
+    match, error = _matching_windows(title)
+    if error:
+        return error
+    window, name = match
+    try:
+        window.restore()
+        window.set_focus()
+        return {"ok": True, "window_title": name, "message": "Restored and focused the requested window."}
+    except Exception as exc:
+        return {"ok": False, "error": "Could not restore the requested window (" + type(exc).__name__ + ")."}
+
+
+def list_installed_applications(limit: int = 100) -> dict[str, Any]:
+    """List known launchable apps and Start Menu shortcuts without launching them."""
+    if platform.system() != "Windows":
+        return {"ok": False, "error": "Installed-app discovery is supported on Windows only."}
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
+        return {"ok": False, "error": "limit must be between 1 and 200."}
+    known = sorted(APPLICATIONS)
+    roots = [
+        Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+    ]
+    shortcuts = set()
+    for root in roots:
+        if root.is_dir():
+            try:
+                for item in root.rglob("*.lnk"):
+                    shortcuts.add(item.stem)
+                    if len(shortcuts) >= limit:
+                        break
+            except OSError:
+                continue
+    names = sorted(set(known).union(shortcuts), key=str.casefold)[:limit]
+    return {
+        "ok": True,
+        "count": len(names),
+        "applications": names,
+        "hint": "Say 'open <exact application name>' to launch a listed app.",
+    }

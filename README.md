@@ -1,6 +1,6 @@
 # HOMER — Setup & First-Run Guide
 
-HOMER is a native Windows desktop assistant backed by a local FastAPI service and a hosted Groq API. The language model runs remotely; you do **not** need a local LLM or a GPU. Core chat, optional voice, and optional webcam gesture controls are installed separately.
+HOMER is a native Windows desktop assistant backed by a local FastAPI service. Groq is the default online AI, with an optional lightweight CPU-only local model as an automatic fallback when Groq cannot be reached. Core chat, optional offline AI, voice, and webcam gesture controls are installed separately.
 
 ## Requirements
 
@@ -111,7 +111,41 @@ You can also open the API documentation at http://127.0.0.1:8000/docs and check 
 
 HOMER indexes supported project files and the local documents folder when the API starts. The default document folder is under the user's profile at .homer/knowledge/documents. Copy PDFs, DOCX, TXT, Markdown, CSV, or source files into that folder. Refresh with POST /knowledge/index; inspect using GET /knowledge/status and test retrieval using GET /knowledge/search?q=your-question. The local SQLite FTS5 index stays on this computer; only relevant excerpts are sent to Groq. This is a lightweight lexical retrieval pipeline, not a neural embedding/vector database.
 
-## 8. HOMER computer control and MCP
+## 8. Automatic online/offline AI
+
+HOMER always tries Groq first. If the Groq API cannot be reached, times out, or returns a temporary server error, HOMER automatically switches that request to a small local model. When Groq is reachable again, the next request uses Groq automatically. Invalid API keys and authentication/permission errors are reported instead of silently switching providers. Rate-limit responses are also reported as online-provider errors.
+
+The offline fallback is **SmolLM2-360M-Instruct Q4_K_M** (a roughly 271 MB GGUF file), loaded through the CPU build of `llama-cpp-python`. It uses a 2,048-token context, two CPU threads by default, and zero GPU layers. It is deliberately small for low-memory computers. Expect simpler and less reliable answers than Groq; it is an English-focused helper, not a replacement for the online model. Offline mode does not call browser/computer tools or access cloud services. It can use HOMER's local SQLite knowledge index.
+
+### One-time offline setup (while internet is available)
+
+Install the optional CPU runtime and Hugging Face downloader:
+
+```powershell
+python -m pip install -r requirements-offline.txt
+```
+
+Download the model once (about 271 MB):
+
+```powershell
+python -m app.ai.offline_model --download
+```
+
+The file is stored by default in `%USERPROFILE%\\.homer\\models`. The model must be downloaded before you disconnect from the internet; the fallback never tries to download weights while offline. To check readiness and the last provider used, open `http://127.0.0.1:8000/ai/status`.
+
+Optional settings in `.env`:
+
+```dotenv
+HOMER_OFFLINE_FALLBACK_ENABLED=true
+HOMER_OFFLINE_THREADS=2
+HOMER_OFFLINE_MAX_TOKENS=160
+# Optional: use a different local GGUF file
+# HOMER_OFFLINE_MODEL_PATH=C:\\Models\\SmolLM2-360M-Instruct-Q4_K_M.gguf
+```
+
+Text chat and voice chat both use the same `POST /chat` backend, so the provider switch applies to both automatically. Windows text-to-speech continues to speak whichever reply the backend returns.
+
+## 9. HOMER computer control and MCP
 
 HOMER exposes a local Model Context Protocol (MCP) server through the same FastAPI process at `http://127.0.0.1:8000/mcp/`. It uses the official Python MCP SDK v2 with Streamable HTTP. The endpoint is intended for local desktop clients only; keep the API bound to 127.0.0.1.
 
@@ -129,7 +163,7 @@ Run `python -m playwright install chromium` once after installing requirements. 
 
 HOMER never accepts arbitrary shell commands, arbitrary JavaScript, browser-cookie export, automated sign-in/submission/payment/account-deletion clicks, or automatic typing into password, email, verification-code, or payment fields. Complete those sensitive steps manually. Screen reading requires an explicit user request and sends one screenshot to the configured Groq vision model. Screen content and webpage text are untrusted data.
 
-## 9. Optional voice and gesture features
+## 10. Optional voice and gesture features
 
 - **Voice assistant:** install requirements-voice.txt, then open Voice assistant from the HOMER desktop sidebar. Live microphone audio is transcribed locally with Faster-Whisper (CPU int8, default base model); Google recognition remains a compatibility fallback if Faster-Whisper is not installed. The first local model use downloads model weights. Set HOMER_WHISPER_MODEL=small for slower, potentially more accurate transcription, or keep base for a lighter 8 GB RAM setup. Spoken responses default to 1.50x speed; adjust HOMER_TTS_SPEED between 0.75 and 2.00.
 - **Gesture controls:** install `requirements-vision.txt`, then choose **Gesture controls**. Camera access starts only after you open the feature. Close its window to release the camera.

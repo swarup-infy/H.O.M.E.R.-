@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.ai.groq_client import AIProviderNotConfigured, ask_homer, clear_history
+from app.ai.groq_client import AIProviderNotConfigured, ai_runtime_status, ask_homer, clear_history
 from app.ai.vision_client import ask_about_image
 from app.config import get_settings
 from app.jobs.routes import router as jobs_router
@@ -116,6 +116,12 @@ async def health() -> dict[str, str | bool]:
             settings.groq_api_key and settings.groq_api_key != "replace_me"
         ),
     }
+
+
+@app.get("/ai/status")
+async def ai_status() -> dict:
+    """Show online-first provider status and offline model readiness."""
+    return ai_runtime_status()
 
 
 @app.get("/chat/settings", response_model=ChatSettingsResponse)

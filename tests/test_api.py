@@ -176,3 +176,18 @@ def test_mcp_streamable_http_endpoint_starts_with_app_lifespan():
     with TestClient(main.app) as lifespan_client:
         response = lifespan_client.get("/mcp/")
     assert response.status_code != 404
+
+
+
+def test_ai_status_reports_online_default_and_offline_readiness(monkeypatch):
+    expected = {
+        "default_provider": "groq",
+        "last_used_provider": "groq",
+        "online_api_key_configured": True,
+        "offline_fallback_enabled": True,
+        "offline": {"runtime_installed": False, "model_downloaded": False},
+    }
+    monkeypatch.setattr(main, "ai_runtime_status", lambda: expected)
+    response = client.get("/ai/status")
+    assert response.status_code == 200
+    assert response.json() == expected

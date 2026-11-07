@@ -56,7 +56,68 @@ VOICE-FIRST RESPONSE LENGTH:
 
 
 class AIProviderNotConfigured(RuntimeError):
-    """Raised when the API key is missing."""
+    """Raised when neither the online provider nor an offline fallback is available."""
+
+
+_last_provider = "groq"
+
+
+def _is_transient_provider_failure(exc: Exception) -> bool:
+    """Return true only for connectivity, timeout, rate-limit, or server failures."""
+    if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+        return True
+    if type(exc).__name__ in {
+        "APIConnectionError", "APITimeoutError", "ConnectError",
+        "ConnectTimeout", "ReadTimeout", "RemoteProtocolError",
+    }:
+        return True
+    status = getattr(exc, "status_code", None)
+    return status == 408 or (
+        isinstance(status, int) and 500 <= status <= 599
+    )
+
+
+async def _answer_offline(user_message: str, settings, reason: str) -> str:
+    """Answer with the local CPU model and the same local RAG index."""
+    global _last_provider
+    from app.ai.offline_client import generate_reply
+
+    async with _history_lock:
+        history = list(_history)
+    retrieved = search_knowledge(user_message, limit=4)
+    knowledge_context = build_knowledge_context(retrieved)
+    answer = await asyncio.to_thread(
+        generate_reply,
+        user_message,
+        history,
+        knowledge_context,
+        getattr(settings, "offline_max_tokens", 160),
+    )
+    async with _history_lock:
+        _history.extend([
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": answer},
+        ])
+        del _history[:-settings.chat_history_messages]
+    _last_provider = "offline"
+    logger.warning("HOMER answered using its local offline model: %s", reason)
+    return "Offline mode (local AI): " + answer
+
+
+def ai_runtime_status() -> dict[str, Any]:
+    """Return active provider and local fallback readiness."""
+    from app.ai.offline_client import model_status
+
+    settings = get_settings()
+    return {
+        "default_provider": "groq",
+        "last_used_provider": _last_provider,
+        "online_api_key_configured": bool(
+            settings.groq_api_key and settings.groq_api_key != "replace_me"
+        ),
+        "offline_fallback_enabled": settings.offline_fallback_enabled,
+        "offline": model_status(),
+    }
 
 
 def _direct_desktop_command(message: str) -> tuple[str, dict[str, Any]] | None:
@@ -285,6 +346,13 @@ async def ask_homer(user_message: str) -> str:
     settings = get_settings()
 
     if not settings.groq_api_key or settings.groq_api_key == "replace_me":
+        if getattr(settings, "offline_fallback_enabled", False):
+            from app.ai.offline_client import internet_available
+            if not await asyncio.to_thread(internet_available):
+                return await _answer_offline(
+                    user_message, settings,
+                    "Groq credentials are not configured and the API host is unreachable.",
+                )
         raise AIProviderNotConfigured(
             "GROQ_API_KEY is missing. Copy .env.example to .env and add your key."
         )
@@ -393,10 +461,19 @@ async def ask_homer(user_message: str) -> str:
                 {"role": "assistant", "content": final_text},
             ])
             del _history[:-settings.chat_history_messages]
+        global _last_provider
+        _last_provider = "groq"
         return final_text
 
     except Exception as exc:
         logger.exception("Groq request failed (%s)", type(exc).__name__)
+        if (
+            getattr(settings, "offline_fallback_enabled", False)
+            and _is_transient_provider_failure(exc)
+        ):
+            return await _answer_offline(
+                user_message, settings, type(exc).__name__
+            )
         raise RuntimeError(
             "The AI provider request failed. Check your internet connection, API key, "
             "account access, and configured model ID."

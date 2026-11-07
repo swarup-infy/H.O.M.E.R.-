@@ -78,6 +78,17 @@ class Settings:
         self.max_message_chars = _read_int(
             "HOMER_MAX_MESSAGE_CHARS", 2000, minimum=1, maximum=20000
         )
+        self.offline_fallback_enabled = os.getenv(
+            "HOMER_OFFLINE_FALLBACK_ENABLED", "true"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.offline_threads = _read_int(
+            "HOMER_OFFLINE_THREADS", 2, minimum=1, maximum=4
+        )
+        self.offline_max_tokens = _read_int(
+            "HOMER_OFFLINE_MAX_TOKENS", 160, minimum=32, maximum=256
+        )
+        self.offline_context_tokens = 2048
+        self.offline_model_name = "SmolLM2-360M-Instruct Q4_K_M"
 
 
 @lru_cache(maxsize=1)

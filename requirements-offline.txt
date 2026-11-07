@@ -1,0 +1,5 @@
+# Optional CPU-only offline chat runtime. Install separately from requirements.txt.
+# Official CPU wheel index avoids requiring Visual Studio/CMake on supported platforms.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python>=0.3.30,<0.4
+huggingface-hub>=0.30,<2.0

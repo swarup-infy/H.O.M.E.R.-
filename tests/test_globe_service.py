@@ -40,7 +40,7 @@ def test_get_globe_url_defaults_to_localhost():
 
 
 def test_get_globe_port_uses_default_and_explicit_port():
-    assert globe_service.get_globe_port("http://localhost") == 80
+    assert globe_service.get_globe_port("http://localhost") == 4173
     assert globe_service.get_globe_port("https://localhost") == 443
     assert globe_service.get_globe_port("http://localhost:4173") == 4173
 

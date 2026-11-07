@@ -157,3 +157,30 @@ def test_offline_model_requires_a_download_before_first_use(monkeypatch, tmp_pat
     monkeypatch.setenv("HOMER_OFFLINE_MODEL_PATH", str(tmp_path / "missing.gguf"))
     with pytest.raises(offline_model.OfflineModelUnavailable, match="not installed"):
         offline_model._load_model()
+
+
+def test_model_status_reports_download_and_runtime_separately(monkeypatch, tmp_path):
+    model_file = tmp_path / "small.gguf"
+    with model_file.open("wb") as handle:
+        handle.truncate(100_000_000)
+    monkeypatch.setenv("HOMER_OFFLINE_MODEL_PATH", str(model_file))
+    monkeypatch.setattr(offline_model.importlib.util, "find_spec", lambda _name: None)
+    status = offline_model.model_status()
+    assert status["downloaded"] is True
+    assert status["runtime_installed"] is False
+    assert status["ready"] is False
+
+
+def test_offline_model_refuses_to_load_when_free_ram_is_too_low(monkeypatch, tmp_path):
+    import psutil
+
+    model_file = tmp_path / "model.gguf"
+    with model_file.open("wb") as handle:
+        handle.truncate(100_000_000)
+    monkeypatch.setenv("HOMER_OFFLINE_MODEL_PATH", str(model_file))
+    monkeypatch.setattr(
+        psutil, "virtual_memory",
+        lambda: SimpleNamespace(available=300 * 1024 * 1024),
+    )
+    with pytest.raises(offline_model.OfflineModelUnavailable, match="close other apps"):
+        offline_model._load_model()

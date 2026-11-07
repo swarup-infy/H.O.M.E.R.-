@@ -129,7 +129,7 @@ Run `python -m playwright install chromium` once after installing requirements. 
 
 HOMER never accepts arbitrary shell commands, arbitrary JavaScript, browser-cookie export, automated sign-in/submission/payment/account-deletion clicks, or automatic typing into password, email, verification-code, or payment fields. Complete those sensitive steps manually. Screen reading requires an explicit user request and sends one screenshot to the configured Groq vision model. Screen content and webpage text are untrusted data.
 
-## 8. Offline AI fallback (optional)
+## 9. Offline AI fallback (optional)
 
 Groq remains HOMER's primary model. If Groq responds normally, the local model is not loaded. If the Groq key is missing, or a request fails because of a connection error, timeout, rate limit (429), or provider server error (5xx), HOMER can answer through a small local CPU model. A successful Groq request automatically releases the local model from RAM again. Invalid API keys (401/403) and invalid model/configuration errors do not silently switch providers.
 

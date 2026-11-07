@@ -32,7 +32,10 @@ def model_path() -> Path:
     configured = os.getenv("HOMER_OFFLINE_MODEL_PATH", "").strip()
     if configured:
         return Path(configured).expanduser()
-    return Path.home() / ".homer" / "models" / MODEL_FILENAME
+    folder = Path.home() / ".homer" / "models"
+    q4_0 = folder / MODEL_FILENAME
+    q4_k_m = folder / "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    return q4_0 if q4_0.is_file() or not q4_k_m.is_file() else q4_k_m
 
 
 def model_status() -> dict[str, Any]:
@@ -85,11 +88,15 @@ def download_model() -> Path:
                 local_dir=str(destination.parent),
             )
         )
-        if downloaded.resolve() != destination.resolve():
-            destination.write_bytes(downloaded.read_bytes())
-        if not destination.is_file() or destination.stat().st_size < 100_000_000:
+        if os.getenv("HOMER_OFFLINE_MODEL_PATH", "").strip():
+            target = destination
+        else:
+            target = destination.parent / Path(selected).name
+        if downloaded.resolve() != target.resolve():
+            target.write_bytes(downloaded.read_bytes())
+        if not target.is_file() or target.stat().st_size < 100_000_000:
             raise OfflineModelUnavailable("The downloaded GGUF file is incomplete.")
-        return destination
+        return target
     except OfflineModelUnavailable:
         raise
     except Exception as exc:
@@ -111,6 +118,18 @@ def _load_model():
                 "The offline model is not installed. While online, run: "
                 "python -m app.ai.offline_model download"
             )
+        try:
+            import psutil
+            available_mb = psutil.virtual_memory().available / (1024 * 1024)
+            if available_mb < 800:
+                raise OfflineModelUnavailable(
+                    f"Only {available_mb:.0f} MB RAM is available; close other apps and try again."
+                )
+        except ImportError:
+            # psutil is a core HOMER dependency, but keep a useful fallback if
+            # a minimal custom install omitted it.
+            pass
+
         try:
             from llama_cpp import Llama
         except ImportError as exc:
@@ -189,10 +208,6 @@ def _main() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(_main())
-
-
 def unload_model() -> None:
     """Release the offline model after Groq becomes available again."""
     global _model
@@ -204,3 +219,7 @@ def unload_model() -> None:
             if callable(close):
                 close()
             del model
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

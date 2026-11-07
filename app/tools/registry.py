@@ -294,6 +294,62 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         },
     },
     {
+        "type": "function", "function": {
+            "name": "start_timer",
+            "description": "Start a local countdown up to 24 hours. It does not alter OS settings.",
+            "parameters": {"type": "object", "properties": {"seconds":{"type":"integer","minimum":1,"maximum":86400},"label":{"type":"string","maxLength":100}}, "required": ["seconds"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
+            "name": "list_timers",
+            "description": "List timers started during the current HOMER process.",
+            "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
+            "name": "get_workspace_presets",
+            "description": "List suggested coding, study, creative and focus workspaces; this does not launch apps automatically.",
+            "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
+            "name": "web_search",
+            "description": "Open a search query in the default browser using DuckDuckGo or Google.",
+            "parameters": {"type": "object", "properties": {"query":{"type":"string","minLength":1,"maxLength":200},"provider":{"type":"string","enum":["duckduckgo","google"]}}, "required": ["query"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
+            "name": "get_weather",
+            "description": "Fetch current weather conditions for a city using Open-Meteo.",
+            "parameters": {"type": "object", "properties": {"city":{"type":"string","minLength":1,"maxLength":100}}, "required": ["city"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
+            "name": "git_status",
+            "description": "Read-only Git status for a project under HOMER or Documents. Does not commit, push or change branches.",
+            "parameters": {"type": "object", "properties": {"project_path":{"type":"string","maxLength":500}}, "required": [], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
+            "name": "execute_workspace_preset",
+            "description": "Open URLs for a named workspace preset only after explicit confirmation. No shell commands, system settings, or app launching.",
+            "parameters": {"type": "object", "properties": {"name": {"type":"string","enum":["coding","study","creative","focus"]}, "confirmed": {"type":"boolean"}}, "required": ["name", "confirmed"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function", "function": {
+            "name": "create_code_draft",
+            "description": "Prepare a code-generation prompt. Does not write, compile or execute code.",
+            "parameters": {"type": "object", "properties": {"description":{"type":"string","minLength":1,"maxLength":2000},"language":{"type":"string","enum":["python","javascript","typescript","html","css","java","c","cpp","rust","go","sql"]}}, "required": ["description"], "additionalProperties": False},
+        },
+    },
+    {
         "type": "function",
         "function": {
             "name": "get_system_status",
@@ -619,6 +675,37 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "Provide one reminder ID."}
         from app.tasks.reminders import complete_reminder
         return complete_reminder(arguments["reminder_id"])
+
+    if name == "execute_workspace_preset":
+        if set(arguments) != {"name", "confirmed"} or not isinstance(arguments.get("confirmed"), bool):
+            return {"ok": False, "error": "Provide preset name and explicit confirmation."}
+        from app.tools.ultron_compat import execute_workspace_preset
+        return execute_workspace_preset(arguments["name"], arguments["confirmed"])
+
+    if name in {"start_timer", "list_timers", "get_workspace_presets", "web_search", "get_weather", "git_status", "create_code_draft"}:
+        from app.tools import ultron_compat
+        handlers = {
+            "start_timer": lambda: ultron_compat.start_timer(arguments.get("seconds"), arguments.get("label", "Timer")),
+            "list_timers": ultron_compat.list_timers,
+            "get_workspace_presets": ultron_compat.workspace_presets,
+            "web_search": lambda: ultron_compat.web_search(arguments.get("query", ""), arguments.get("provider", "duckduckgo")),
+            "get_weather": lambda: ultron_compat.fetch_weather(arguments.get("city", "")),
+            "git_status": lambda: ultron_compat.git_status(arguments.get("project_path", "")),
+            "create_code_draft": lambda: ultron_compat.create_code_draft(arguments.get("description", ""), arguments.get("language", "python")),
+        }
+        required = {
+            "start_timer": {"seconds"}, "list_timers": set(), "get_workspace_presets": set(),
+            "web_search": {"query"}, "get_weather": {"city"}, "git_status": set(), "create_code_draft": {"description"},
+        }
+        allowed = {
+            "start_timer": {"seconds", "label"}, "list_timers": set(), "get_workspace_presets": set(),
+            "web_search": {"query", "provider"}, "get_weather": {"city"}, "git_status": {"project_path"},
+            "create_code_draft": {"description", "language"},
+        }
+        if not required[name] <= set(arguments) or set(arguments) - allowed[name]:
+            return {"ok": False, "error": "Invalid arguments for this tool."}
+        return handlers[name]()
+
     if name == "get_system_status":
         if arguments:
             return {"ok": False, "error": "get_system_status accepts no arguments."}

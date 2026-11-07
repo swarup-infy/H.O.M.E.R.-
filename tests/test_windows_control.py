@@ -49,7 +49,7 @@ def test_restore_window_is_windows_only(monkeypatch):
     monkeypatch.setattr(windows_control.platform, "system", lambda: "Linux")
     result = windows_control.restore_window("HOMER")
     assert result["ok"] is False
-    assert "Windows only" in result
+    assert "Windows only" in result["error"]
 
 
 def test_window_match_rejects_ambiguous_or_empty_title(monkeypatch):

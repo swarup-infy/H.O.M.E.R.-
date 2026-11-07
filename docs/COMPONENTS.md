@@ -18,8 +18,6 @@ and webcam gesture control are optional feature packs.
   audio, applications, screen and desktop context.
 - `app/voice/`: optional microphone transcription and Windows speech output.
 - `app/vision/mouse_control.py`: optional webcam air-mouse window.
-- `app/jobs/`: local job search links, skill-fit scoring and application
-  tracking exposed through the backend API.
 - `app/ascii_face.py` and `app/assets/homer_core.png`: desktop assistant
   state and visual identity.
 

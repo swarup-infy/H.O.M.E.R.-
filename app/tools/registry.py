@@ -244,8 +244,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "description": "Maximize one uniquely matching visible Windows window by title.",
             "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
         },
-    }
-
+    },
     {
         "type": "function",
         "function": {

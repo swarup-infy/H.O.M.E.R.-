@@ -40,8 +40,9 @@ class AnimatedHomerCore(QWidget):
         self.setMinimumSize(320, 320)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.timer = QTimer(self)
-        self.timer.setInterval(25)
+        self.timer.setInterval(50)
         self.timer.timeout.connect(self._tick)
+        # Animate at a lighter idle cadence; use a faster cadence only when active.
         self.timer.start()
         asset_dir = Path(__file__).parent / "assets"
         # Prefer the newer artwork; fall back to the original filename.
@@ -52,7 +53,17 @@ class AnimatedHomerCore(QWidget):
 
     def set_mode(self, mode: str) -> None:
         self.mode = mode.upper()
+        self.timer.setInterval(25 if self.mode in {"SPEAKING", "LISTENING"} else 50)
         self.update()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self.timer.isActive():
+            self.timer.start()
+
+    def hideEvent(self, event) -> None:
+        self.timer.stop()
+        super().hideEvent(event)
 
     @Slot()
     def _tick(self) -> None:

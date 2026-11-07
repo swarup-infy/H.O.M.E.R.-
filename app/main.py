@@ -1,5 +1,6 @@
 ﻿"""FastAPI entry point for the HOMER API-first MVP."""
 
+import asyncio
 import logging
 import base64
 import binascii
@@ -10,7 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.ai.groq_client import AIProviderNotConfigured, ai_runtime_status, ask_homer, clear_history
+from app.ai.groq_client import AIProviderNotConfigured, ai_runtime_status, ask_homer, clear_history, close_ai_client
 from app.ai.vision_client import ask_about_image
 from app.config import get_settings
 from app.jobs.routes import router as jobs_router
@@ -20,17 +21,25 @@ from app.mcp_server import mcp as homer_mcp
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+async def _index_knowledge_in_background() -> None:
+    """Build the local index without holding up API startup."""
+    try:
+        result = await run_in_threadpool(index_knowledge_base)
+        logger.info("HOMER knowledge index ready: %s", result)
+    except Exception:
+        logger.exception("HOMER could not complete the initial knowledge index")
+
+
 @asynccontextmanager
 async def lifespan(_app):
-    """Run the MCP session manager and prepare local RAG before serving requests."""
+    """Start local services quickly and index knowledge without blocking readiness."""
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(homer_mcp.session_manager.run())
+        asyncio.create_task(_index_knowledge_in_background(), name="homer-knowledge-index")
         try:
-            result = await run_in_threadpool(index_knowledge_base)
-            logger.info("HOMER knowledge index ready: %s", result)
-        except Exception:
-            logger.exception("HOMER could not complete the initial knowledge index")
-        yield
+            yield
+        finally:
+            await close_ai_client()
 
 
 app = FastAPI(

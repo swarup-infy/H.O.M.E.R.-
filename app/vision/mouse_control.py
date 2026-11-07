@@ -37,6 +37,7 @@ class GestureMouseWindow(QMainWindow):
         self._last_cursor = None
         self._last_frame_time = 0.0
         self._smooth = 0.32
+        self._screen_size = pyautogui.size()
         self._camera_index = 0
 
         root = QWidget()
@@ -86,7 +87,8 @@ class GestureMouseWindow(QMainWindow):
         layout.addLayout(row)
 
         self._timer = QTimer(self)
-        self._timer.setInterval(15)
+        # 30 ms keeps tracking responsive (~33 FPS) without saturating CPU.
+        self._timer.setInterval(30)
         self._timer.timeout.connect(self._process_frame)
         self._start_camera()
 
@@ -126,7 +128,7 @@ class GestureMouseWindow(QMainWindow):
         return landmarks[tip].y < landmarks[pip].y
 
     def _move_pointer(self, landmark, frame_width, frame_height):
-        screen_width, screen_height = pyautogui.size()
+        screen_width, screen_height = self._screen_size
         # Ignore the outer 10% of the camera view to make edge control easier.
         margin = 0.10
         nx = min(1.0, max(0.0, (landmark.x - margin) / (1 - 2 * margin)))
@@ -207,7 +209,7 @@ class GestureMouseWindow(QMainWindow):
         image = QImage(
             rgb_frame.data, frame_width, frame_height,
             rgb_frame.strides[0], QImage.Format.Format_RGB888
-        ).copy()
+        )
         self.preview.setPixmap(
             QPixmap.fromImage(image).scaled(
                 self.preview.size(), Qt.AspectRatioMode.KeepAspectRatio,

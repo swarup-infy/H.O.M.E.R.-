@@ -45,6 +45,7 @@ def settings(**overrides):
         "groq_max_output_tokens": 100,
         "chat_history_messages": 12,
         "offline_fallback_enabled": True,
+        "ai_mode": "auto",
         "offline_max_tokens": 120,
         "offline_threads": 2,
     }
@@ -142,3 +143,25 @@ def test_fallback_disabled_keeps_provider_error(monkeypatch):
         with pytest.raises(RuntimeError):
             asyncio.run(groq_client.ask_homer("Hello"))
     local.assert_not_called()
+
+
+
+def test_missing_key_uses_offline_even_when_internet_is_available(monkeypatch):
+    monkeypatch.setattr(groq_client, "get_settings", lambda: settings(groq_api_key=""))
+    monkeypatch.setattr(groq_client, "search_knowledge", lambda *args, **kwargs: [])
+    monkeypatch.setattr(groq_client, "build_knowledge_context", lambda results: "")
+    with patch("app.ai.offline_client.generate_reply", return_value="Local model works") as local:
+        reply = asyncio.run(groq_client.ask_homer("Hello"))
+    assert "Local model works" in reply
+    local.assert_called_once()
+
+
+def test_explicit_offline_mode_never_creates_groq_client(monkeypatch):
+    monkeypatch.setattr(groq_client, "get_settings", lambda: settings(ai_mode="offline", groq_api_key="configured-test-key"))
+    monkeypatch.setattr(groq_client, "search_knowledge", lambda *args, **kwargs: [])
+    monkeypatch.setattr(groq_client, "build_knowledge_context", lambda results: "")
+    with patch("app.ai.offline_client.generate_reply", return_value="Offline only") as local:
+        with patch.object(groq_client, "AsyncGroq", side_effect=AssertionError("Groq must not be called")):
+            reply = asyncio.run(groq_client.ask_homer("Hello"))
+    assert "Offline only" in reply
+    local.assert_called_once()

@@ -4,12 +4,12 @@ import sys
 import html
 import base64
 import io
+from pathlib import Path
 
 import httpx
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QTimer
-from PySide6.QtGui import QFont
-from app.ascii_face import AsciiHomerFace
+from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QTimer, QRectF
+from PySide6.QtGui import QFont, QPainter, QPixmap
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -136,6 +136,52 @@ class MessageBubble(QFrame):
 
         layout.addWidget(name_label)
         layout.addWidget(message_label)
+
+
+class HomerCoreWidget(QWidget):
+    """Lightweight animated display using the original homer_core.png artwork."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_mode = "IDLE"
+        self.phase = 0.0
+        asset_path = Path(__file__).parent / "assets" / "homer_core.png"
+        self.pixmap = QPixmap(str(asset_path))
+        self.setFixedSize(86, 70)
+        self.setToolTip("HOMER AI core")
+        self.timer = QTimer(self)
+        self.timer.setInterval(70)
+        self.timer.timeout.connect(self._tick)
+        self.timer.start()
+
+    def set_mode(self, mode: str) -> None:
+        self.current_mode = str(mode).upper()
+        self.timer.setInterval(
+            35 if self.current_mode in {"THINKING", "RESPONDING", "SPEAKING", "LISTENING"}
+            else 70
+        )
+        self.update()
+
+    def _tick(self) -> None:
+        self.phase = (self.phase + 0.075) % (2 * 3.141592653589793)
+        self.update()
+
+    def paintEvent(self, event):
+        del event
+        if self.pixmap.isNull():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        pulse = 0.96 + 0.04 * (0.5 + 0.5 * __import__("math").sin(self.phase))
+        width = self.pixmap.width() * pulse
+        height = self.pixmap.height() * pulse
+        target = QRectF(
+            (self.width() - width) / 2,
+            (self.height() - height) / 2,
+            width,
+            height,
+        )
+        painter.drawPixmap(target, self.pixmap, QRectF(self.pixmap.rect()))
 
 
 class HomerWindow(QMainWindow):
@@ -350,11 +396,6 @@ class HomerWindow(QMainWindow):
         )
         vision_button.clicked.connect(self.open_gesture_controls)
 
-        globe_button = QPushButton("◎  God's Eye View")
-        globe_button.setObjectName("secondaryButton")
-        globe_button.setToolTip("Open a local geospatial globe workspace.")
-        globe_button.clicked.connect(self.open_gods_eye_view)
-
         sidebar_layout.addWidget(brand)
         sidebar_layout.addWidget(subtitle)
         sidebar_layout.addSpacing(18)
@@ -366,7 +407,6 @@ class HomerWindow(QMainWindow):
         sidebar_layout.addWidget(chat_button)
         sidebar_layout.addWidget(future_button)
         sidebar_layout.addWidget(vision_button)
-        sidebar_layout.addWidget(globe_button)
         sidebar_layout.addStretch()
 
         footer = QLabel("HOMER DESKTOP\nVersion 0.1.0")
@@ -393,8 +433,8 @@ class HomerWindow(QMainWindow):
 
         topbar_layout.addWidget(page_title)
         topbar_layout.addStretch()
-        self.face_widget = AsciiHomerFace(compact=True)
-        topbar_layout.addWidget(self.face_widget)
+        self.core_widget = HomerCoreWidget()
+        topbar_layout.addWidget(self.core_widget)
         topbar_layout.addWidget(self.connection_label)
 
         # Scrollable conversation
@@ -497,26 +537,6 @@ class HomerWindow(QMainWindow):
             self.set_status(f"Could not start hand controls: {exc}")
             self.add_message("HOMER", f"Could not start hand controls: {exc}")
 
-    def open_gods_eye_view(self):
-        """Open the optional local God’s Eye View service."""
-        import os
-        import webbrowser
-        from urllib.parse import urlparse
-
-        url = os.getenv("HOMER_GLOBE_URL", "http://127.0.0.1:4173").strip()
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            self.set_status("Invalid HOMER_GLOBE_URL. Use a local HTTP(S) URL.")
-            return
-        if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
-            self.set_status("For safety, the globe launcher only opens localhost URLs.")
-            return
-
-        webbrowser.open(url)
-        self.set_status(
-            "Opening the local globe in your browser. Start the globe service first."
-        )
-
     def handle_voice_mode_switch(self, mode: str):
         """Route explicit voice commands to the requested desktop mode."""
         if mode == "text":
@@ -580,7 +600,7 @@ class HomerWindow(QMainWindow):
                 self.connection_label.setStyleSheet(
                     "color: #8de3b1;"
                 )
-                self.face_widget.set_state("IDLE")
+                self.core_widget.set_mode("IDLE")
                 self.set_status(
                     f"Connected to {data.get('provider', 'AI')}."
                 )
@@ -591,7 +611,7 @@ class HomerWindow(QMainWindow):
             self.show_api_offline()
 
     def show_api_offline(self):
-        self.face_widget.set_state("OFFLINE")
+        self.core_widget.set_mode("OFFLINE")
         self.connection_label.setText("● API offline")
         self.connection_label.setStyleSheet(
             "color: #ff8f9b;"
@@ -617,7 +637,7 @@ class HomerWindow(QMainWindow):
         self.message_input.setEnabled(False)
         self.send_button.setEnabled(False)
         self.set_status("HOMER is thinking...")
-        self.face_widget.set_state("THINKING")
+        self.core_widget.set_mode("THINKING")
 
         self.thread = QThread(self)
         self.worker = ChatWorker(message)
@@ -637,20 +657,20 @@ class HomerWindow(QMainWindow):
     @Slot(str)
     def handle_reply(self, reply: str):
         self.add_message("HOMER", reply)
-        self.face_widget.set_state("RESPONDING")
+        self.core_widget.set_mode("RESPONDING")
         QTimer.singleShot(1800, lambda: self._reset_face_state("RESPONDING"))
         self.set_status("Response received.")
 
     @Slot(str)
     def handle_error(self, message: str):
         self.add_message("HOMER", message)
-        self.face_widget.set_state("ERROR")
+        self.core_widget.set_mode("ERROR")
         QTimer.singleShot(2200, lambda: self._reset_face_state("ERROR"))
         self.set_status("The request could not be completed.")
 
     def _reset_face_state(self, expected_state: str) -> None:
-        if self.face_widget.current_state == expected_state:
-            self.face_widget.set_state("IDLE")
+        if self.core_widget.current_mode == expected_state:
+            self.core_widget.set_mode("IDLE")
 
     @Slot()
     def request_finished(self):

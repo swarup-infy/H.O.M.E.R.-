@@ -18,6 +18,12 @@ SETTING_ENV_VARS = (
     "GROQ_MAX_RETRIES",
     "HOMER_CHAT_HISTORY_MESSAGES",
     "HOMER_MAX_MESSAGE_CHARS",
+    "HOMER_OFFLINE_FALLBACK_ENABLED",
+    "HOMER_OFFLINE_THREADS",
+    "HOMER_OFFLINE_MAX_TOKENS",
+    "HOMER_OFFLINE_CONTEXT_TOKENS",
+    "HOMER_OFFLINE_BATCH_SIZE",
+    "HOMER_OFFLINE_MIN_AVAILABLE_RAM_MB",
 )
 
 
@@ -40,6 +46,9 @@ def test_settings_defaults_are_safe_and_documented(monkeypatch) -> None:
     assert settings.groq_max_retries == 2
     assert settings.chat_history_messages == 12
     assert settings.max_message_chars == 2000
+    assert settings.offline_context_tokens == 1536
+    assert settings.offline_batch_size == 32
+    assert settings.offline_min_available_ram_mb == 900
 
 
 @pytest.mark.parametrize(
@@ -57,6 +66,9 @@ def test_settings_defaults_are_safe_and_documented(monkeypatch) -> None:
         ("HOMER_CHAT_HISTORY_MESSAGES", "1", "between 2 and 100"),
         ("HOMER_CHAT_HISTORY_MESSAGES", "11", "must be an even number"),
         ("HOMER_MAX_MESSAGE_CHARS", "20001", "between 1 and 20000"),
+        ("HOMER_OFFLINE_CONTEXT_TOKENS", "512", "between 1024 and 2048"),
+        ("HOMER_OFFLINE_BATCH_SIZE", "8", "between 16 and 64"),
+        ("HOMER_OFFLINE_MIN_AVAILABLE_RAM_MB", "400", "between 700 and 2000"),
     ],
 )
 def test_invalid_settings_fail_with_clear_message(

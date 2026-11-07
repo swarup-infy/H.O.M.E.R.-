@@ -1,4 +1,9 @@
 """Offline model tests; no model weights or network access are required."""
+import sys
+from types import SimpleNamespace
+
+import pytest
+
 from app.ai import offline_client
 
 
@@ -61,11 +66,13 @@ def test_empty_offline_reply_returns_safe_message(monkeypatch):
 def test_model_status_reports_missing_model_without_loading(monkeypatch, tmp_path):
     model = tmp_path / "missing.gguf"
     monkeypatch.setattr(offline_client, "model_path", lambda: model)
-    monkeypatch.setattr("builtins.__import__", __import__)
     status = offline_client.model_status()
     assert status["model_downloaded"] is False
     assert status["gpu_required"] is False
-    assert status["context_tokens"] == 2048
+    assert status["context_tokens"] == 1536
+    assert status["threads"] == 2
+    assert status["batch_size"] == 32
+    assert status["minimum_available_ram_mb"] == 900
 
 
 def test_unload_model_closes_and_releases_cached_instance(monkeypatch):
@@ -86,15 +93,46 @@ def test_unload_model_closes_and_releases_cached_instance(monkeypatch):
 
 def test_low_available_ram_is_rejected_before_loading_runtime(monkeypatch, tmp_path):
     import psutil
-    import pytest
 
     model_file = tmp_path / "offline.gguf"
     with model_file.open("wb") as handle:
         handle.truncate(100_000_001)
     monkeypatch.setattr(offline_client, "model_path", lambda: model_file)
+    monkeypatch.setenv("HOMER_OFFLINE_MIN_AVAILABLE_RAM_MB", "900")
     monkeypatch.setattr(
         psutil, "virtual_memory",
-        lambda: type("Memory", (), {"available": 200 * 1024 * 1024})(),
+        lambda: type("Memory", (), {"available": 800 * 1024 * 1024})(),
     )
-    with pytest.raises(RuntimeError, match="Close other applications"):
+    with pytest.raises(RuntimeError, match="at least 900 MB free"):
         offline_client._load_model()
+
+
+def test_model_loader_uses_low_memory_cpu_configuration(monkeypatch, tmp_path):
+    model_file = tmp_path / "offline.gguf"
+    with model_file.open("wb") as handle:
+        handle.truncate(100_000_001)
+    captured = {}
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(offline_client, "model_path", lambda: model_file)
+    monkeypatch.setenv("HOMER_OFFLINE_CONTEXT_TOKENS", "1536")
+    monkeypatch.setenv("HOMER_OFFLINE_THREADS", "2")
+    monkeypatch.setenv("HOMER_OFFLINE_BATCH_SIZE", "32")
+    monkeypatch.setitem(sys.modules, "llama_cpp", SimpleNamespace(Llama=FakeLlama))
+    monkeypatch.setattr(
+        "psutil.virtual_memory",
+        lambda: type("Memory", (), {"available": 2 * 1024 * 1024 * 1024})(),
+    )
+    offline_client.reset_model_for_tests()
+    try:
+        offline_client._load_model()
+        assert captured["n_ctx"] == 1536
+        assert captured["n_threads"] == 2
+        assert captured["n_batch"] == 32
+        assert captured["n_gpu_layers"] == 0
+        assert captured["use_mmap"] is True
+    finally:
+        offline_client.reset_model_for_tests()

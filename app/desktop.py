@@ -537,7 +537,7 @@ class HomerWindow(QMainWindow):
                 self._globe_process = start_globe_service(
                     project_dir, get_globe_port(url)
                 )
-            except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            except (FileNotFoundError, OSError, RuntimeError, ValueError) as exc:
                 self.set_status(str(exc))
                 return
 

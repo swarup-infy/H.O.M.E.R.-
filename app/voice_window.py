@@ -342,6 +342,9 @@ class VoiceTask(QObject):
                 if self.mode == "listen":
                     message = self._listen_once()
                     self.transcript.emit(message)
+                elif message:
+                    # Typed prompts use the same animated user-message transcript.
+                    self.transcript.emit(message)
                 if not message:
                     raise RuntimeError("Type a message or use the microphone first.")
                 self.state.emit("THINKING")

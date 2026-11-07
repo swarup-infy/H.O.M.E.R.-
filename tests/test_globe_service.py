@@ -13,7 +13,6 @@ from app import globe_service
         "http://127.0.0.1:4173",
         "http://localhost:4173",
         "http://[::1]:4173",
-        "https://localhost:8443/globe",
     ],
 )
 def test_get_globe_url_accepts_loopback(url):
@@ -23,6 +22,7 @@ def test_get_globe_url_accepts_loopback(url):
 @pytest.mark.parametrize(
     "url",
     [
+        "https://localhost:4173",
         "https://example.com",
         "file:///tmp/globe",
         "http://127.0.0.1:99999",
@@ -41,7 +41,6 @@ def test_get_globe_url_defaults_to_localhost():
 
 def test_get_globe_port_uses_default_and_explicit_port():
     assert globe_service.get_globe_port("http://localhost") == 4173
-    assert globe_service.get_globe_port("https://localhost") == 443
     assert globe_service.get_globe_port("http://localhost:4173") == 4173
 
 

@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.ai.groq_client import AIProviderNotConfigured, ai_runtime_status, ask_homer, clear_history
 from app.ai.vision_client import ask_about_image
 from app.config import get_settings
+from app.jobs.routes import router as jobs_router
 from app.knowledge.store import index_knowledge_base, knowledge_status, search_knowledge
 from app.mcp_server import mcp as homer_mcp
 
@@ -38,6 +39,7 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+app.include_router(jobs_router)
 # MCP runs in this same process and shares HOMER's browser/window services.
 mcp_http_app = homer_mcp.streamable_http_app(streamable_http_path="/")
 app.mount("/mcp", mcp_http_app)

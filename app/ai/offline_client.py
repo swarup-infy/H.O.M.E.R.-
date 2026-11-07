@@ -6,6 +6,7 @@ inference time. The model is intentionally not allowed to execute desktop tools.
 """
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import threading
@@ -35,18 +36,18 @@ def model_path() -> Path:
 def model_status() -> dict[str, Any]:
     """Return offline readiness without loading the model into RAM."""
     path = model_path()
-    try:
-        from llama_cpp import Llama  # noqa: F401
-        runtime_installed = True
-    except ImportError:
-        runtime_installed = False
+    enabled = os.getenv("HOMER_OFFLINE_FALLBACK_ENABLED", "true").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    runtime_installed = importlib.util.find_spec("llama_cpp") is not None
+    downloaded = path.is_file() and path.stat().st_size > 100_000_000
     return {
-        "enabled": os.getenv("HOMER_OFFLINE_FALLBACK_ENABLED", "true").strip().lower()
-        in {"1", "true", "yes", "on"},
+        "enabled": enabled,
         "runtime_installed": runtime_installed,
-        "model_downloaded": path.is_file(),
+        "model_downloaded": downloaded,
+        "ready": enabled and runtime_installed and downloaded,
         "model_path": str(path),
-        "model_size_mb": round(path.stat().st_size / (1024 * 1024), 1) if path.is_file() else None,
+        "model_size_mb": round(path.stat().st_size / (1024 * 1024), 1) if downloaded else None,
         "model": "SmolLM2-360M-Instruct Q4_K_M",
         "context_tokens": 2048,
         "gpu_required": False,
@@ -91,6 +92,16 @@ def _load_model():
                 "python -m app.ai.offline_model --download"
             )
         try:
+            import psutil
+            available_mb = psutil.virtual_memory().available / (1024 * 1024)
+            if available_mb < 700:
+                raise RuntimeError(
+                    f"Only {available_mb:.0f} MB RAM is available. Close other applications and retry."
+                )
+        except ImportError:
+            pass
+
+        try:
             from llama_cpp import Llama
         except ImportError as exc:
             raise RuntimeError(
@@ -103,7 +114,7 @@ def _load_model():
                 model_path=str(path),
                 n_ctx=2048,
                 n_threads=max(1, min(int(os.getenv("HOMER_OFFLINE_THREADS", "2")), 4)),
-                n_batch=128,
+                n_batch=64,
                 n_gpu_layers=0,
                 use_mmap=True,
                 use_mlock=False,
@@ -128,7 +139,6 @@ def generate_reply(
     max_tokens: int = 160,
 ) -> str:
     """Generate a concise local reply; no network or tool calling is performed."""
-    model = _load_model()
     messages: list[dict[str, str]] = [
         {
             "role": "system",
@@ -155,6 +165,7 @@ def generate_reply(
     messages.append({"role": "user", "content": user_message[:1200]})
 
     with _generation_lock:
+        model = _load_model()
         try:
             response = model.create_chat_completion(
                 messages=messages,
@@ -191,3 +202,18 @@ def internet_available(timeout: float = 1.5) -> bool:
             return True
     except OSError:
         return False
+
+
+def unload_model() -> None:
+    """Release model weights from RAM when Groq successfully recovers."""
+    global _model, _model_path
+    with _generation_lock:
+        with _model_lock:
+            model = _model
+            _model = None
+            _model_path = None
+        if model is not None:
+            close = getattr(model, "close", None)
+            if callable(close):
+                close()
+            del model

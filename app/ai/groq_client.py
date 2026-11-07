@@ -466,6 +466,13 @@ async def ask_homer(user_message: str) -> str:
                 {"role": "assistant", "content": final_text},
             ])
             del _history[:-settings.chat_history_messages]
+        # If a previous request loaded the CPU fallback, release it now that
+        # Groq is healthy again so low-memory machines recover that RAM.
+        try:
+            from app.ai.offline_client import unload_model
+            await asyncio.to_thread(unload_model)
+        except Exception:
+            logger.debug("Could not unload the offline model after Groq recovery.", exc_info=True)
         global _last_provider
         _last_provider = "groq"
         return final_text

@@ -66,3 +66,35 @@ def test_model_status_reports_missing_model_without_loading(monkeypatch, tmp_pat
     assert status["model_downloaded"] is False
     assert status["gpu_required"] is False
     assert status["context_tokens"] == 2048
+
+
+def test_unload_model_closes_and_releases_cached_instance(monkeypatch):
+    class FakeModel:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    fake = FakeModel()
+    monkeypatch.setattr(offline_client, "_model", fake)
+    monkeypatch.setattr(offline_client, "_model_path", offline_client.Path("model.gguf"))
+    offline_client.unload_model()
+    assert fake.closed is True
+    assert offline_client._model is None
+    assert offline_client._model_path is None
+
+
+def test_low_available_ram_is_rejected_before_loading_runtime(monkeypatch, tmp_path):
+    import psutil
+    import pytest
+
+    model_file = tmp_path / "offline.gguf"
+    with model_file.open("wb") as handle:
+        handle.truncate(100_000_001)
+    monkeypatch.setattr(offline_client, "model_path", lambda: model_file)
+    monkeypatch.setattr(
+        psutil, "virtual_memory",
+        lambda: type("Memory", (), {"available": 200 * 1024 * 1024})(),
+    )
+    with pytest.raises(RuntimeError, match="Close other applications"):
+        offline_client._load_model()

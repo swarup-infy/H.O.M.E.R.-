@@ -191,3 +191,9 @@ def test_ai_status_reports_online_default_and_offline_readiness(monkeypatch):
     response = client.get("/ai/status")
     assert response.status_code == 200
     assert response.json() == expected
+
+
+def test_job_search_api_is_not_registered():
+    """HOMER intentionally ships no job-search or application-tracker endpoints."""
+    paths = main.app.openapi()["paths"]
+    assert not any(path.startswith("/jobs") for path in paths)

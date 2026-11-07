@@ -244,6 +244,54 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "description": "Maximize one uniquely matching visible Windows window by title.",
             "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_installed_applications",
+            "description": "List known Windows applications and exact Start Menu shortcuts available to launch.",
+            "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "minimize_window",
+            "description": "Minimize one uniquely matching visible Windows window by title.",
+            "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "restore_window",
+            "description": "Restore and focus one uniquely matching visible Windows window by title.",
+            "parameters": {"type": "object", "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 120}}, "required": ["title"], "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_audio_control",
+            "description": "Read or control Windows master output volume. Actions: get, set, mute, unmute, volume_up, volume_down. Set accepts volume 0-100.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["get", "set", "mute", "unmute", "volume_up", "volume_down"]},
+                    "volume": {"type": "integer", "minimum": 0, "maximum": 100},
+                },
+                "required": ["action"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_desktop_context",
+            "description": "Get a compact snapshot of open windows, the configured HOMER browser profile, and Windows master audio state. Does not capture or upload a screenshot.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
     }
 ]
 
@@ -537,8 +585,8 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     if name == "play_youtube_video":
         return _play_youtube_video(arguments)
     if name == "close_named_window":
-        if set(arguments) != {"application"}:
-            return {"ok": False, "error": "Choose the application window to close."}
+        if set(arguments) != {"application"} or not isinstance(arguments.get("application"), str):
+            return {"ok": False, "error": "Choose one application window by name."}
         from app.tools.computer_use import close_window
         return close_window(arguments["application"])
     if name == "inspect_screen":
@@ -547,12 +595,14 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         from app.tools.computer_use import inspect_screen
         return inspect_screen()
     if name == "read_screen":
-        if set(arguments) - {"question"}:
-            return {"ok": False, "error": "read_screen accepts only an optional question."}
+        if set(arguments) - {"question"} or (
+            "question" in arguments and not isinstance(arguments["question"], str)
+        ):
+            return {"ok": False, "error": "read_screen accepts only an optional text question."}
         from app.tools.computer_use import read_screen
         return read_screen(arguments.get("question", "Describe what is visible on my screen."))
     if name == "launch_application":
-        if set(arguments) != {"application"}:
+        if set(arguments) != {"application"} or not isinstance(arguments.get("application"), str):
             return {"ok": False, "error": "Provide one allowlisted application name."}
         from app.tools.windows_control import launch_application
         return launch_application(arguments["application"])
@@ -577,8 +627,20 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         from app.tools.windows_control import focus_window
         return focus_window(arguments["title"])
     if name == "browser_control":
-        if set(arguments) - {"action", "url", "text", "tab_index", "volume", "seconds"} or "action" not in arguments:
-            return {"ok": False, "error": "Provide a browser action and only supported optional parameters."}
+        allowed_keys = {"action", "url", "text", "tab_index", "volume", "seconds"}
+        if (
+            set(arguments) - allowed_keys
+            or not isinstance(arguments.get("action"), str)
+            or not isinstance(arguments.get("url", ""), str)
+            or not isinstance(arguments.get("text", ""), str)
+            or not isinstance(arguments.get("tab_index", -1), int)
+            or isinstance(arguments.get("tab_index", -1), bool)
+            or not isinstance(arguments.get("volume", 50), int)
+            or isinstance(arguments.get("volume", 50), bool)
+            or not isinstance(arguments.get("seconds", 0), int)
+            or isinstance(arguments.get("seconds", 0), bool)
+        ):
+            return {"ok": False, "error": "Provide a valid browser action and correctly typed optional parameters."}
         from app.tools.browser_control import browser_action
         return browser_action(
             action=arguments["action"],
@@ -593,6 +655,35 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "close_homer_browser accepts no arguments."}
         from app.tools.browser_control import close_browser
         return close_browser()
+    if name == "get_desktop_context":
+        if arguments:
+            return {"ok": False, "error": "get_desktop_context accepts no arguments."}
+        from app.tools.windows_control import list_windows
+        from app.tools.browser_control import browser_status
+        from app.tools.audio_control import get_system_audio
+        return {
+            "ok": True,
+            "windows": list_windows(),
+            "browser": browser_status(),
+            "system_audio": get_system_audio(),
+            "screen_capture": "not performed",
+        }
+    if name == "system_audio_control":
+        if set(arguments) - {"action", "volume"} or not isinstance(arguments.get("action"), str):
+            return {"ok": False, "error": "Provide an audio action and optional volume only."}
+        from app.tools.audio_control import control_system_audio
+        return control_system_audio(arguments["action"], arguments.get("volume"))
+    if name == "list_installed_applications":
+        if set(arguments) - {"limit"}:
+            return {"ok": False, "error": "Only an optional limit is accepted."}
+        from app.tools.windows_control import list_installed_applications
+        return list_installed_applications(arguments.get("limit", 100))
+    if name in {"minimize_window", "restore_window"}:
+        if set(arguments) != {"title"} or not isinstance(arguments.get("title"), str):
+            return {"ok": False, "error": "Provide one window title."}
+        from app.tools import windows_control
+        action = windows_control.minimize_window if name == "minimize_window" else windows_control.restore_window
+        return action(arguments["title"])
     if name == "click_screen_target":
         if set(arguments) != {"target"} or not isinstance(arguments.get("target"), str):
             return {"ok": False, "error": "Provide one target description."}

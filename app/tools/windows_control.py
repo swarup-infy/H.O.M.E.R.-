@@ -168,10 +168,26 @@ def close_window_by_title(title: str) -> dict[str, Any]:
             }
         window, name = matches[0]
         window.close()
+        try:
+            still_visible = bool(window.is_visible())
+        except Exception:
+            # A stale UIA element after closing is treated as closed; a live
+            # element that cannot be queried is not reported as a verified close.
+            try:
+                still_visible = bool(window.exists(timeout=0.5))
+            except Exception:
+                still_visible = False
         return {
-            "ok": True,
+            "ok": not still_visible,
             "window_title": name,
-            "message": "Sent a normal close request. The app may ask you to save unsaved work.",
+            "close_requested": True,
+            "still_visible_after_request": still_visible,
+            "message": (
+                "Sent a normal close request, but the window remains visible. "
+                "It may be showing an unsaved-work confirmation."
+                if still_visible else
+                "The requested window is no longer visible."
+            ),
         }
     except Exception as exc:
         return {"ok": False, "error": "Could not close the requested window (" + type(exc).__name__ + ")."}

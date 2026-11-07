@@ -152,14 +152,21 @@ HOMER exposes a local Model Context Protocol (MCP) server through the same FastA
 MCP tools include:
 - Screen metadata inspection and explicit one-shot visual screen reading.
 - Visible window listing, focusing, maximizing, normal closing, and launching known apps or an exact installed Start Menu shortcut by display name.
-- A dedicated, visible Chromium browser with tab management, back/forward/reload navigation, page text snapshots, safe text clicks, typing, keyboard shortcuts, and HTML media play/pause/stop/volume/seek controls.
+- A dedicated, visible browser using bundled Chromium, installed Chrome, Edge, or Brave (selectable in .env), with tab management, back/forward/reload navigation, page text snapshots, safe text clicks, typing, keyboard shortcuts, and HTML media play/pause/stop/volume/seek controls.
+- Windows master speaker volume and mute controls, global media play/pause/next/previous, installed Start Menu app discovery, and per-window minimize/restore/maximize/focus/close.
 - Normal close requests for supported application windows.
 
 For VS Code, use [the MCP HTTP configuration example](docs/mcp-config-vscode.json). For Claude Desktop, copy [the stdio configuration example](docs/mcp-config-claude-desktop.example.json) and adjust its local HOMER folder path. To connect another compatible MCP client, configure a Streamable HTTP server with URL `http://127.0.0.1:8000/mcp/`. For a local stdio client instead, run `python -m app.mcp_server`. Do not run both transports against different copies if you expect the same browser session; the HTTP endpoint shares HOMER's FastAPI process.
 
+### New desktop controls
+
+The MCP server exposes the same local tools to compatible MCP clients over stdio or Streamable HTTP. It now includes in-process tested tool discovery, a `homer://capabilities` resource, and a `desktop_voice_assistant_guide` prompt. New desktop actions include installed-app discovery, window minimize/restore, master speaker volume get/set/mute/unmute, and global media controls. System audio uses the Windows Core Audio endpoint through pycaw; these controls require Windows and the added pycaw/comtypes packages.
+
+Check the AI provider and offline fallback at `GET /ai/status`. Check the selected browser engine without opening a window by calling the `get_browser_status` MCP tool. Use `get_desktop_context` for a compact snapshot of open windows, browser configuration, and master audio state; it does not capture a screenshot. The MCP HTTP endpoint is local-only by default. Do not expose it to a public network without authentication and a deliberate security review.
+
 ### Browser setup and privacy
 
-Run `python -m playwright install chromium` once after installing requirements. HOMER opens its own visible Chromium profile under `%USERPROFILE%\\.homer\\browser-profile`; it does not attach to or extract cookies from the user's regular Chrome/Edge profile. Supported site domains are explicitly allowlisted in `app/tools/browser_control.py`. A site must permit playback and expose an HTML audio/video element for direct media controls to work. Log in manually in the visible HOMER browser if a site requires an account.
+Run `python -m playwright install chromium` once after installing requirements if you choose bundled Chromium. Set `HOMER_BROWSER_CHANNEL=chromium`, `chrome`, `msedge`, or `brave` to select the browser engine. HOMER creates a separate visible profile under `%USERPROFILE%\\.homer\\browser-profile-<channel>`; it does not attach to or extract cookies from your normal browser profile. For Brave in a non-standard folder, set `HOMER_BRAVE_EXECUTABLE`. Supported site domains are explicitly allowlisted in `app/tools/browser_control.py`. A site must permit playback and expose an HTML audio/video element for direct media controls to work. Log in manually in the visible HOMER browser if a site requires an account.
 
 HOMER never accepts arbitrary shell commands, arbitrary JavaScript, browser-cookie export, automated sign-in/submission/payment/account-deletion clicks, or automatic typing into password, email, verification-code, or payment fields. Complete those sensitive steps manually. Screen reading requires an explicit user request and sends one screenshot to the configured Groq vision model. Screen content and webpage text are untrusted data.
 

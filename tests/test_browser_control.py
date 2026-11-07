@@ -1,4 +1,6 @@
 """Browser safety and validation tests; never launch a real browser."""
+import pytest
+
 from app.tools import browser_control
 
 
@@ -98,3 +100,44 @@ def test_browser_blocks_submit_clicks(monkeypatch):
     result = browser_control.browser_action("click_text", text="Submit")
     assert result["ok"] is False
     assert "manually" in result["error"]
+
+
+def test_browser_channel_defaults_to_isolated_chromium(monkeypatch):
+    monkeypatch.delenv("HOMER_BROWSER_CHANNEL", raising=False)
+    selected, options = browser_control._browser_configuration()
+    assert selected == "chromium"
+    assert options == {}
+
+
+def test_browser_channel_supports_installed_chrome_and_edge(monkeypatch):
+    monkeypatch.setenv("HOMER_BROWSER_CHANNEL", "chrome")
+    assert browser_control._browser_configuration() == ("chrome", {"channel": "chrome"})
+    monkeypatch.setenv("HOMER_BROWSER_CHANNEL", "msedge")
+    assert browser_control._browser_configuration() == ("msedge", {"channel": "msedge"})
+
+
+def test_browser_channel_rejects_unknown_engine(monkeypatch):
+    monkeypatch.setenv("HOMER_BROWSER_CHANNEL", "opera")
+    with pytest.raises(RuntimeError, match="HOMER_BROWSER_CHANNEL"):
+        browser_control._browser_configuration()
+
+
+def test_browser_status_does_not_launch_browser(monkeypatch):
+    monkeypatch.setenv("HOMER_BROWSER_CHANNEL", "chromium")
+    result = browser_control.browser_status()
+    assert result["ok"] is True
+    assert result["dedicated_profile"] is True
+    assert "profile_path" in result
+
+
+def test_browser_rejects_embedded_credentials_and_nonstandard_ports():
+    assert not browser_control._allowed_url("https://user:password@youtube.com/")
+    assert not browser_control._allowed_url("https://youtube.com:8443/")
+    assert not browser_control._allowed_url(None)
+
+
+def test_browser_allowlist_includes_common_productivity_and_messaging_sites():
+    assert browser_control._allowed_url("https://web.whatsapp.com/")
+    assert browser_control._allowed_url("https://drive.google.com/")
+    assert browser_control._allowed_url("https://www.canva.com/")
+    assert browser_control._allowed_url("https://huggingface.co/")

@@ -19,7 +19,16 @@ ALLOWED_DOMAINS = {
     "netflix.com", "twitch.tv", "linkedin.com", "instagram.com", "x.com",
     "facebook.com", "amazon.com", "amazon.in", "microsoft.com", "outlook.com",
     "live.com", "gmail.com", "discord.com", "notion.so", "stackoverflow.com",
-    "claude.ai", "perplexity.ai", "brave.com",
+    "claude.ai", "perplexity.ai", "brave.com", "duckduckgo.com", "bing.com",
+    "whatsapp.com", "web.whatsapp.com", "telegram.org", "signal.org",
+    "zoom.us", "dropbox.com", "box.com", "canva.com", "figma.com",
+    "office.com", "microsoft365.com", "teams.microsoft.com", "drive.google.com",
+    "docs.google.com", "calendar.google.com", "maps.google.com", "photos.google.com",
+    "developer.mozilla.org", "python.org", "pypi.org", "huggingface.co",
+    "coursera.org", "edx.org", "medium.com", "dev.to", "w3schools.com",
+    "unsplash.com", "pinterest.com", "imdb.com", "primevideo.com", "disneyplus.com",
+    "hotstar.com", "jiosaavn.com", "gaana.com", "soundcloud.com", "apple.com",
+    "icloud.com", "zoom.com", "webex.com", "slack.com", "trello.com",
 }
 BLOCKED_CLICK_TERMS = {
     "buy now", "place order", "delete account", "delete permanently",
@@ -38,14 +47,65 @@ _active_index = 0
 
 
 def _allowed_url(url: str) -> bool:
+    """Accept only allowlisted HTTPS hosts without embedded credentials or custom ports."""
+    if not isinstance(url, str) or not url.strip():
+        return False
     try:
         parsed = urlparse(url.strip())
-        if parsed.scheme != "https" or not parsed.hostname:
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 443)
+        ):
             return False
         host = parsed.hostname.casefold()
         return any(host == domain or host.endswith("." + domain) for domain in ALLOWED_DOMAINS)
     except ValueError:
         return False
+
+
+def _browser_configuration() -> tuple[str, dict[str, str]]:
+    """Resolve the selected installed browser while keeping a private HOMER profile."""
+    selected = os.getenv("HOMER_BROWSER_CHANNEL", "chromium").strip().lower()
+    if selected not in {"chromium", "chrome", "msedge", "brave"}:
+        raise RuntimeError("HOMER_BROWSER_CHANNEL must be chromium, chrome, msedge, or brave.")
+    if selected == "chromium":
+        return selected, {}
+    if selected in {"chrome", "msedge"}:
+        return selected, {"channel": selected}
+
+    configured = os.getenv("HOMER_BRAVE_EXECUTABLE", "").strip()
+    candidates = [Path(configured).expanduser()] if configured else []
+    roots = [
+        Path(os.getenv("LOCALAPPDATA", "")),
+        Path(os.getenv("PROGRAMFILES", r"C:\Program Files")),
+        Path(os.getenv("PROGRAMFILES(X86)", r"C:\Program Files (x86)")),
+    ]
+    candidates.extend(root / "BraveSoftware/Brave-Browser/Application/brave.exe" for root in roots)
+    executable = next((path for path in candidates if path.is_file()), None)
+    if executable is None:
+        raise RuntimeError("Brave was selected but brave.exe was not found. Set HOMER_BRAVE_EXECUTABLE.")
+    return selected, {"executable_path": str(executable)}
+
+
+def browser_status() -> dict[str, Any]:
+    """Report selected browser engine without launching a browser."""
+    try:
+        selected, options = _browser_configuration()
+        return {
+            "ok": True,
+            "selected_browser": selected,
+            "dedicated_profile": True,
+            "profile_path": os.getenv("HOMER_BROWSER_PROFILE", "") or str(
+                Path.home() / ".homer" / ("browser-profile-" + selected)
+            ),
+            "launch_mode": "Playwright persistent context",
+            "launch_option": next(iter(options), "bundled Chromium"),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 def _ensure_browser():
@@ -60,7 +120,10 @@ def _ensure_browser():
             "Browser automation is not installed. Run: python -m pip install playwright "
             "and python -m playwright install chromium"
         ) from exc
-    profile = Path(os.getenv("HOMER_BROWSER_PROFILE", str(Path.home() / ".homer" / "browser-profile"))).expanduser()
+    selected, launch_options = _browser_configuration()
+    configured_profile = os.getenv("HOMER_BROWSER_PROFILE", "").strip()
+    default_profile = Path.home() / ".homer" / ("browser-profile-" + selected)
+    profile = Path(configured_profile).expanduser() if configured_profile else default_profile
     profile.mkdir(parents=True, exist_ok=True)
     _playwright = sync_playwright().start()
     try:
@@ -69,6 +132,7 @@ def _ensure_browser():
             headless=False,
             viewport=None,
             args=["--start-maximized", "--disable-session-crashed-bubble"],
+            **launch_options,
         )
     except Exception:
         _playwright.stop()
@@ -173,7 +237,7 @@ def _browser_action_impl(
         "play", "pause", "toggle", "stop", "volume", "volume_up",
         "volume_down", "seek",
     }
-    if action not in valid_actions:
+    if not isinstance(action, str) or action not in valid_actions:
         return {"ok": False, "error": "Unsupported browser action."}
     if action in {"navigate", "new_tab"} and not _allowed_url(url):
         return {"ok": False, "error": "Only allowlisted HTTPS sites can be opened in HOMER's browser."}

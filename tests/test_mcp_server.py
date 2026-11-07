@@ -1,5 +1,8 @@
 """MCP server registration and registry bridge tests."""
+import asyncio
 from unittest.mock import patch
+
+from mcp import Client
 
 from app.mcp_server import mcp
 from app.tools import registry
@@ -55,3 +58,56 @@ def test_maximize_window_dispatches_by_title():
         result = registry.execute_tool("maximize_window", {"title": "HOMER"})
     assert result == expected
     maximize.assert_called_once_with("HOMER")
+
+
+def test_mcp_in_process_client_sees_desktop_and_media_tools():
+    async def inspect_tools():
+        async with Client(mcp, raise_exceptions=True) as client:
+            result = await client.list_tools()
+            return {tool.name for tool in result.tools}
+
+    names = asyncio.run(inspect_tools())
+    assert {
+        "inspect_screen", "read_screen", "click_visible_control",
+        "list_open_windows", "list_installed_applications",
+        "focus_open_window", "minimize_window_by_title",
+        "restore_window_by_title", "maximize_window_by_title",
+        "close_window_by_title", "launch_application_by_name",
+        "control_active_window", "control_system_audio", "control_media",
+        "browser_control", "get_browser_status", "close_homer_browser",
+        "search_local_knowledge", "get_desktop_context",
+    }.issubset(names)
+
+
+def test_mcp_control_system_audio_calls_local_audio_backend(monkeypatch):
+    expected = {"ok": True, "volume": 35, "muted": False, "device": "default_output"}
+    from app.tools import audio_control
+    monkeypatch.setattr(audio_control, "control_system_audio", lambda action, volume: expected)
+
+    async def call_tool():
+        async with Client(mcp, raise_exceptions=True) as client:
+            return await client.call_tool("control_system_audio", {"action": "get"})
+
+    result = asyncio.run(call_tool())
+    assert result.is_error is not True
+    assert "35" in result.content[0].text
+
+
+def test_mcp_capabilities_resource_is_registered():
+    async def inspect_resources():
+        async with Client(mcp, raise_exceptions=True) as client:
+            result = await client.list_resources()
+            return {str(item.uri) for item in result.resources}
+
+    assert {"homer://capabilities", "homer://desktop/status"}.issubset(
+        asyncio.run(inspect_resources())
+    )
+
+
+def test_mcp_voice_prompt_is_registered():
+    async def inspect_prompts():
+        async with Client(mcp, raise_exceptions=True) as client:
+            result = await client.list_prompts()
+            return {item.name for item in result.prompts}
+
+    assert "desktop_voice_assistant_guide" in asyncio.run(inspect_prompts())

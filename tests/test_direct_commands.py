@@ -173,3 +173,85 @@ def test_browser_media_result_reports_playback_and_volume():
     )
     assert "playing" in reply
     assert "70%" in reply
+
+
+def test_system_volume_up_routes_to_windows_master_audio():
+    assert groq_client._direct_desktop_command("Turn the volume up") == (
+        "system_audio_control", {"action": "volume_up"}
+    )
+
+
+def test_set_system_volume_routes_to_windows_master_audio():
+    assert groq_client._direct_desktop_command("Set system volume to 35") == (
+        "system_audio_control", {"action": "set", "volume": 35}
+    )
+
+
+def test_mute_system_audio_routes_to_windows_master_audio():
+    assert groq_client._direct_desktop_command("Mute the computer sound") == (
+        "system_audio_control", {"action": "mute"}
+    )
+
+
+def test_browser_volume_is_separate_from_system_volume():
+    assert groq_client._direct_desktop_command("Turn the browser volume up") == (
+        "browser_control", {"action": "volume_up"}
+    )
+
+
+def test_list_installed_apps_routes_without_llm():
+    assert groq_client._direct_desktop_command("Show installed applications") == (
+        "list_installed_applications", {"limit": 100}
+    )
+
+
+def test_minimize_named_window_routes_directly():
+    assert groq_client._direct_desktop_command("Minimize window titled YouTube") == (
+        "minimize_window", {"title": "YouTube"}
+    )
+
+
+def test_restore_named_window_routes_directly():
+    assert groq_client._direct_desktop_command("Restore window titled YouTube") == (
+        "restore_window", {"title": "YouTube"}
+    )
+
+def test_current_system_volume_query_routes_to_audio_status():
+    assert groq_client._direct_desktop_command("What's my volume?") == (
+        "system_audio_control", {"action": "get"}
+    )
+
+
+def test_mute_short_command_routes_to_system_audio():
+    assert groq_client._direct_desktop_command("Mute") == (
+        "system_audio_control", {"action": "mute"}
+    )
+
+
+def test_open_whatsapp_routes_to_allowed_browser_site():
+    assert groq_client._direct_desktop_command("Open WhatsApp") == (
+        "browser_control", {"action": "navigate", "url": "https://web.whatsapp.com/"}
+    )
+
+
+def test_open_google_drive_routes_to_specific_site():
+    assert groq_client._direct_desktop_command("Open Google Drive") == (
+        "browser_control", {"action": "navigate", "url": "https://drive.google.com/"}
+    )
+
+
+def test_system_audio_result_is_speech_friendly():
+    reply = groq_client._format_direct_result(
+        "system_audio_control", {"ok": True, "volume": 35, "muted": False}
+    )
+    assert "35 percent" in reply
+    assert "unmuted" in reply
+
+
+def test_installed_application_result_is_readable():
+    reply = groq_client._format_direct_result(
+        "list_installed_applications",
+        {"ok": True, "applications": ["Notepad", "Visual Studio Code"]},
+    )
+    assert "Notepad" in reply
+    assert "Visual Studio Code" in reply
